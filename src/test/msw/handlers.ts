@@ -8,6 +8,9 @@ import type {
   ValidationRunResponse,
 } from "@/features/validations/types";
 import type { ViolationResponse } from "@/features/violations/types";
+import { VIOLATION_TRANSITIONS } from "@/features/violations/types";
+import type { RemediationTaskResponse } from "@/features/remediation/types";
+import { REMEDIATION_TRANSITIONS } from "@/features/remediation/types";
 import {
   MFA_USER_EMAIL,
   MFA_USER_PASSWORD,
@@ -30,6 +33,7 @@ import {
   validationRuleRows,
   validationRunRows,
   violationRows,
+  remediationTaskRows,
 } from "./fixtures";
 
 /**
@@ -1252,16 +1256,38 @@ export const handlers = [
     return HttpResponse.json({ success: true, data: row });
   }),
 
-  // ---- Violations (Phase 7 chain — full module in Phase 8) -------------------
-  http.get("/api/violations", () =>
-    HttpResponse.json({ success: true, data: violationRows }),
-  ),
+  // ---- Violations (full module — Phase 8) -----------------------------------
+  http.get("/api/violations", ({ request }) => {
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status");
+    const severity = url.searchParams.get("severity");
+    const assignedTo = url.searchParams.get("assignedTo");
+    let rows = violationRows;
+    if (status) rows = rows.filter((row) => row.status === status);
+    if (severity) rows = rows.filter((row) => row.severity === severity);
+    if (assignedTo) rows = rows.filter((row) => row.assignedTo === assignedTo);
+    return HttpResponse.json({ success: true, data: rows });
+  }),
+
+  http.get("/api/violations/:id", ({ params }) => {
+    const row = violationRows.find((v) => v.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Violation not found" } },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({ success: true, data: row });
+  }),
 
   http.post("/api/violations", async ({ request }) => {
     const body = (await request.json()) as {
       validationResultId?: string;
       severity: string;
       title: string;
+      description?: string;
+      assignedTo?: string;
+      dueAt?: string;
     };
     const now = new Date().toISOString();
     const created: ViolationResponse = {
@@ -1269,18 +1295,278 @@ export const handlers = [
       validationResultId: body.validationResultId ?? null,
       severity: body.severity,
       title: body.title,
-      description: null,
+      description: body.description ?? null,
       status: "OPEN",
-      assignedTo: null,
+      assignedTo: body.assignedTo ?? null,
       openedAt: now,
-      dueAt: null,
+      dueAt: body.dueAt ?? null,
       closedAt: null,
       resolutionSummary: null,
+      evidenceRequiredFlag: false,
       version: 1,
       createdAt: now,
       updatedAt: now,
     };
     violationRows.push(created);
     return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.patch("/api/violations/:id", async ({ params, request }) => {
+    const row = violationRows.find((v) => v.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Violation not found" } },
+        { status: 404 },
+      );
+    }
+    const body = (await request.json()) as {
+      version?: number;
+      severity?: string;
+      status?: string;
+      assignedTo?: string | null;
+      dueAt?: string | null;
+      resolutionSummary?: string | null;
+    };
+    if (body.version === undefined || body.version !== row.version) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: "Concurrent update detected; refresh and retry with the current version",
+          },
+        },
+        { status: 409 },
+      );
+    }
+    if (row.status === "CLOSED" || row.status === "ARCHIVED") {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: `Violation is already ${row.status} and cannot be updated` },
+        },
+        { status: 409 },
+      );
+    }
+    const nextStatus = body.status ?? row.status;
+    if (
+      body.status !== undefined &&
+      !VIOLATION_TRANSITIONS[row.status as keyof typeof VIOLATION_TRANSITIONS]?.some(
+        (t) => t.to === nextStatus,
+      )
+    ) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: `Illegal transition ${row.status} → ${nextStatus} in violation lifecycle` },
+        },
+        { status: 409 },
+      );
+    }
+    if (body.severity !== undefined) row.severity = body.severity;
+    if (body.status !== undefined) row.status = nextStatus;
+    if (body.assignedTo !== undefined) row.assignedTo = body.assignedTo;
+    if (body.dueAt !== undefined) row.dueAt = body.dueAt;
+    if (body.resolutionSummary !== undefined) row.resolutionSummary = body.resolutionSummary;
+    row.version += 1;
+    row.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  http.post("/api/violations/:id/close", async ({ params, request }) => {
+    const row = violationRows.find((v) => v.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Violation not found" } },
+        { status: 404 },
+      );
+    }
+    const body = (await request.json()) as { version?: number; resolutionSummary?: string };
+    if (row.status !== "VALIDATED") {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: `Violation must be VALIDATED before closing (current: ${row.status})` },
+        },
+        { status: 409 },
+      );
+    }
+    if (body.version === undefined || body.version !== row.version) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: "Concurrent update detected; refresh and retry with the current version",
+          },
+        },
+        { status: 409 },
+      );
+    }
+    row.status = "CLOSED";
+    row.resolutionSummary = body.resolutionSummary ?? null;
+    row.closedAt = new Date().toISOString();
+    row.version += 1;
+    row.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  // ---- Remediation tasks (Phase 8) -------------------------------------------
+  http.get("/api/remediation-tasks", ({ request }) => {
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status");
+    const violationId = url.searchParams.get("violationId");
+    const assignedTo = url.searchParams.get("assignedTo");
+    let rows = remediationTaskRows;
+    if (status) rows = rows.filter((row) => row.status === status);
+    if (violationId) rows = rows.filter((row) => row.violationId === violationId);
+    if (assignedTo) rows = rows.filter((row) => row.assignedTo === assignedTo);
+    return HttpResponse.json({ success: true, data: rows });
+  }),
+
+  http.get("/api/remediation-tasks/:id", ({ params }) => {
+    const row = remediationTaskRows.find((t) => t.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Remediation task not found" } },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  http.post("/api/remediation-tasks", async ({ request }) => {
+    const body = (await request.json()) as {
+      violationId: string;
+      taskTitle: string;
+      taskDescription?: string;
+      assignedTo?: string;
+      dueAt?: string;
+    };
+    const now = new Date().toISOString();
+    const created: RemediationTaskResponse = {
+      id: `rem-created-${Date.now()}`,
+      violationId: body.violationId,
+      source: "MANUAL",
+      taskTitle: body.taskTitle,
+      taskDescription: body.taskDescription ?? null,
+      status: "PENDING",
+      assignedTo: body.assignedTo ?? null,
+      dueAt: body.dueAt ?? null,
+      verifiedAt: null,
+      verifiedBy: null,
+      closedAt: null,
+      verificationNotes: null,
+      resolutionSummary: null,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    remediationTaskRows.push(created);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.patch("/api/remediation-tasks/:id", async ({ params, request }) => {
+    const row = remediationTaskRows.find((t) => t.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Remediation task not found" } },
+        { status: 404 },
+      );
+    }
+    const body = (await request.json()) as {
+      version?: number;
+      status?: string;
+      assignedTo?: string | null;
+      dueAt?: string | null;
+      verificationNotes?: string | null;
+      resolutionSummary?: string | null;
+    };
+    if (body.version === undefined || body.version !== row.version) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: "Concurrent update detected; refresh and retry with the current version",
+          },
+        },
+        { status: 409 },
+      );
+    }
+    if (row.status === "CLOSED" || row.status === "CANCELLED") {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: `Remediation task is already ${row.status} and cannot be updated` },
+        },
+        { status: 409 },
+      );
+    }
+    const nextStatus = body.status ?? row.status;
+    if (
+      body.status !== undefined &&
+      !REMEDIATION_TRANSITIONS[row.status as keyof typeof REMEDIATION_TRANSITIONS]?.some(
+        (t) => t.to === nextStatus,
+      )
+    ) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: `Illegal transition ${row.status} → ${nextStatus} in remediation task lifecycle` },
+        },
+        { status: 409 },
+      );
+    }
+    if (body.status !== undefined) row.status = nextStatus;
+    if (body.assignedTo !== undefined) row.assignedTo = body.assignedTo;
+    if (body.dueAt !== undefined) row.dueAt = body.dueAt;
+    if (body.verificationNotes !== undefined) row.verificationNotes = body.verificationNotes;
+    if (body.resolutionSummary !== undefined) row.resolutionSummary = body.resolutionSummary;
+    if (nextStatus === "VERIFIED") {
+      row.verifiedAt = new Date().toISOString();
+      row.verifiedBy = "usr_demo_admin";
+    }
+    row.version += 1;
+    row.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  http.post("/api/remediation-tasks/:id/close", async ({ params, request }) => {
+    const row = remediationTaskRows.find((t) => t.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Remediation task not found" } },
+        { status: 404 },
+      );
+    }
+    const body = (await request.json()) as { version?: number; resolutionSummary?: string };
+    if (row.status !== "VERIFIED") {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: `Remediation task must be VERIFIED before closing (current: ${row.status})` },
+        },
+        { status: 409 },
+      );
+    }
+    if (body.version === undefined || body.version !== row.version) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: "Concurrent update detected; refresh and retry with the current version",
+          },
+        },
+        { status: 409 },
+      );
+    }
+    row.status = "CLOSED";
+    row.resolutionSummary = body.resolutionSummary ?? null;
+    row.closedAt = new Date().toISOString();
+    row.version += 1;
+    row.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ success: true, data: row });
   }),
 ];

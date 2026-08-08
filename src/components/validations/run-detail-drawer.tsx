@@ -35,7 +35,7 @@ export function RunDetailDrawer({ open, onClose, runId }: RunDetailDrawerProps) 
   );
   // Lookup caches are only needed while the drawer is open (§4.3 fetch gating).
   const { data: rules } = useValidationRules({}, open);
-  const { data: violations } = useViolations(open);
+  const { data: violations } = useViolations({}, open);
   const { data: controls } = useControls({ pageSize: 200 }, open);
   const { data: users } = useUsers(open);
   const createViolationMutation = useCreateViolation();

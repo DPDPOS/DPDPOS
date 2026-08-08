@@ -62,7 +62,7 @@ export function isRouteLive(route: AppRoute): boolean {
 }
 
 /** Build phase shipped so far — later-phase nav items render disabled. */
-export const CURRENT_PHASE = 7;
+export const CURRENT_PHASE = 8;
 
 export const NAV_GROUPS: NavGroup[] = [
   "Overview",
@@ -197,7 +197,8 @@ export const APP_ROUTES: AppRoute[] = [
     group: "Enforcement",
     icon: AlertTriangle,
     permission: "violation:read",
-    phase: 3,
+    phase: 8,
+    shipped: true,
   },
   {
     href: "/remediation",
@@ -206,7 +207,8 @@ export const APP_ROUTES: AppRoute[] = [
     group: "Enforcement",
     icon: ClipboardCheck,
     permission: "remediation:read",
-    phase: 3,
+    phase: 8,
+    shipped: true,
   },
 
   // Proof -------------------------------------------------------------------
