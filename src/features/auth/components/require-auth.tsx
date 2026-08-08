@@ -1,0 +1,33 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { Spinner } from "@/components/ui/spinner";
+import { bootstrapSession } from "@/features/auth/session";
+import { useSessionStore } from "@/state/session";
+
+export function RequireAuth({ children }: { children: React.ReactNode }) {
+  const status = useSessionStore((state) => state.status);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "idle") void bootstrapSession();
+  }, [status]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") router.replace("/login");
+  }, [status, router]);
+
+  if (status !== "authenticated") {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-bg">
+        <div className="flex flex-col items-center gap-3">
+          <Spinner size="lg" label="Restoring session" />
+          <p className="micro-label">Restoring session…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}

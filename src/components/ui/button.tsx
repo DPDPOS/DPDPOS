@@ -1,3 +1,4 @@
+import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@/lib/utils/cn";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -7,6 +8,8 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  /** Render the button styles on a child (e.g. a Link) instead of a <button>. */
+  asChild?: boolean;
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
@@ -29,19 +32,22 @@ export function Button({
   variant = "primary",
   size = "md",
   type = "button",
+  asChild = false,
   ...props
 }: ButtonProps) {
+  const classes = cn(
+    "focus-ring inline-flex select-none items-center justify-center font-medium transition-colors",
+    "disabled:pointer-events-none disabled:opacity-50",
+    variantClasses[variant],
+    sizeClasses[size],
+    className,
+  );
+
+  if (asChild) {
+    return <Slot className={classes} {...props} />;
+  }
+
   return (
-    <button
-      type={type}
-      className={cn(
-        "focus-ring inline-flex select-none items-center justify-center font-medium transition-colors",
-        "disabled:pointer-events-none disabled:opacity-50",
-        variantClasses[variant],
-        sizeClasses[size],
-        className,
-      )}
-      {...props}
-    />
+    <button type={type} className={classes} {...props} />
   );
 }

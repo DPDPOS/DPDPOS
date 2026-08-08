@@ -1,4 +1,6 @@
 import type { ApiEnvelope } from "@/types/api";
+import { useSessionStore } from "@/state/session";
+import { refreshAccessToken } from "@/lib/auth/refresh";
 import { ApiError } from "./errors";
 
 /**
@@ -38,8 +40,17 @@ export async function api<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
+  return request<T>(path, options, false);
+}
+
+async function request<T>(
+  path: string,
+  options: ApiRequestOptions,
+  retried: boolean,
+): Promise<T> {
   const { body, query, headers, ...init } = options;
   const url = `${BASE_URL}${path}${buildQuery(query)}`;
+  const accessToken = useSessionStore.getState().accessToken;
 
   let res: Response;
   try {
@@ -48,6 +59,7 @@ export async function api<T>(
       headers: {
         Accept: "application/json",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -57,6 +69,31 @@ export async function api<T>(
       code: "NETWORK_ERROR",
       message: "Network request failed — is the backend running?",
       status: 0,
+    });
+  }
+
+  // 401 on a non-auth endpoint: silent refresh, replay once, else hard logout.
+  if (res.status === 401 && !retried && !path.startsWith("/auth/")) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return request<T>(path, options, true);
+    }
+    useSessionStore.getState().clear();
+    throw new ApiError({
+      code: "UNAUTHORIZED",
+      message: "Your session has expired. Please sign in again.",
+      status: 401,
+    });
+  }
+
+  // A replayed request (after a successful rotation) that still 401s means the
+  // server has rejected the session outright — stop pretending it exists.
+  if (res.status === 401 && retried && !path.startsWith("/auth/")) {
+    useSessionStore.getState().clear();
+    throw new ApiError({
+      code: "UNAUTHORIZED",
+      message: "Your session has expired. Please sign in again.",
+      status: 401,
     });
   }
 
