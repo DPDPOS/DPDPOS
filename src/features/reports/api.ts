@@ -3,7 +3,7 @@ import type { GenerateReportPayload, ReportListQuery, ReportRecord } from "./typ
 
 /**
  * Reports API — mirrors dpdpos_backend/src/modules/reports/routes/report.routes.ts.
- * The list returns the paged shape inside `data` (no meta) — normalized by apiList.
+ * The list returns items in `data` with `meta.pagination` — normalized by apiList.
  */
 export const reportsApi = {
   list: (query: ReportListQuery) =>

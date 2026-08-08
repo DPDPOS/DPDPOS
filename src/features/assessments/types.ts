@@ -146,33 +146,58 @@ export interface ControlEvalResult {
   evidenceRefs: Array<{ kind: string; ref: string }>;
 }
 
+export interface AssessmentReportSummary {
+  pass: number;
+  partial: number;
+  fail: number;
+  unknown: number;
+  notApplicable: number;
+  scoreKind?: "READINESS";
+  disclaimer?: string;
+  evidenceCeilingApplied?: boolean;
+  ceilingReason?: string | null;
+  profile?: {
+    processesChildren: boolean | null;
+    crossBorder: boolean | null;
+    isSdf: boolean | null;
+    hasVendors: boolean | null;
+  };
+}
+
 export interface AssessmentReport {
   id: string;
   version: number;
   score: number;
-  summary: {
-    pass: number;
-    partial: number;
-    fail: number;
-    unknown: number;
-    notApplicable: number;
-  };
+  scoreKind?: "READINESS";
+  disclaimer?: string;
+  summary: AssessmentReportSummary;
   results: ControlEvalResult[];
   createdAt: string;
 }
 
 export interface EvaluateResponse {
   score: number;
-  summary: AssessmentReport["summary"];
+  scoreKind?: "READINESS";
+  summary: AssessmentReportSummary;
   results: ControlEvalResult[];
   versionNumber: number;
+  openedViolations?: number;
+  nextSteps?: {
+    remediation: string;
+    violations: string;
+    hint: string;
+  };
 }
 
 export interface AssessmentVersion {
   id: string;
   versionNumber: number;
   label: string | null;
+  readinessScore?: number | null;
+  snapshotJson?: unknown;
   createdAt: string;
+  frozenPriorScore?: number | null;
+  frozenFromVersion?: number;
 }
 
 export interface AssessmentAuditEvent {

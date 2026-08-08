@@ -54,31 +54,31 @@ const STEPS: Array<{
     id: "documents",
     label: "Documents",
     title: "Upload policy documents",
-    hint: "Add the files you already have. Optionally paste extracted text for PDFs/scans so evaluation can read them.",
+    hint: "Required. Upload files and paste extracted text for PDFs — searchable text is what earns document credit.",
   },
   {
     id: "questionnaire",
     label: "Questionnaire",
     title: "DPDP readiness questionnaire",
-    hint: "Answer one question at a time. Each answer saves automatically and advances when ready.",
+    hint: "Required. Profile answers (children, cross-border, SDF, vendors) change which controls apply and how hard PASS is.",
   },
   {
     id: "cli",
     label: "CLI scan",
     title: "Mint a CLI token and submit scan evidence",
-    hint: "Generate a token, run the scanner locally, then refresh until findings appear.",
+    hint: "Strongly recommended. Without CLI findings, readiness score is capped at 55.",
   },
   {
     id: "evaluate",
     label: "Evaluate",
-    title: "Evaluate controls",
-    hint: "Score controls from documents, questionnaire answers, and CLI findings.",
+    title: "Evaluate readiness",
+    hint: "Produces a readiness score (not certification). FAIL controls open Violations + remediation tasks automatically.",
   },
   {
     id: "version",
     label: "Version",
-    title: "Version and audit trail",
-    hint: "Snapshot this run before fixes/rescans. Review the hash-chained audit log.",
+    title: "Freeze version and continue the loop",
+    hint: "Creating a version freezes the prior readiness pack, then you fix → re-scan → re-evaluate.",
   },
 ];
 
@@ -117,16 +117,21 @@ async function extractPlainText(file: File): Promise<string | undefined> {
 function stepIncompleteMessage(step: WorkflowStep): string | null {
   switch (step) {
     case "documents":
-      return "No ready policy files yet. Upload at least one document, or skip for now.";
+      return "Upload at least one READY policy document before continuing.";
     case "questionnaire":
-      return "Some required questions are still unanswered. Finish them, or skip for now.";
+      return "Answer all required visible questions before continuing.";
     case "cli":
-      return "No completed scan with findings yet. Run the CLI and refresh, or skip for now.";
+      return "No CLI scan with findings yet. Without it, readiness will be capped at 55 — you may continue anyway.";
     case "evaluate":
-      return "No report for this version yet. Run Evaluate, or skip for now.";
+      return "Run Evaluate to produce a readiness report before finishing.";
     default:
       return null;
   }
+}
+
+/** Documents + questionnaire are hard gates; CLI/evaluate allow continue-with-warning. */
+function isHardGate(step: WorkflowStep): boolean {
+  return step === "documents" || step === "questionnaire";
 }
 
 interface Props {
@@ -329,9 +334,15 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   const advance = (force = false) => {
     const incomplete = !stepComplete(currentStep.id);
-    if (incomplete && !force) {
-      setSoftWarn(stepIncompleteMessage(currentStep.id));
-      return;
+    if (incomplete) {
+      if (isHardGate(currentStep.id)) {
+        setSoftWarn(stepIncompleteMessage(currentStep.id));
+        return;
+      }
+      if (!force) {
+        setSoftWarn(stepIncompleteMessage(currentStep.id));
+        return;
+      }
     }
     setSoftWarn(null);
     if (stepIndex >= STEPS.length - 1) {
@@ -975,14 +986,25 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
           {currentStep.id === "evaluate" ? (
             <div className="space-y-5">
+              <p className="rounded-sm border border-border bg-surface-2/60 px-3 py-2 text-[12px] text-ink-2">
+                This is a <span className="font-medium text-ink">readiness score</span>,
+                not DPDP certification. PASS needs corroboration (CLI and/or
+                searchable policy text). FAIL controls open Violations and AUTO
+                remediation tasks so the assessment feeds the ops loop.
+              </p>
               <Can perm="assessment:evaluate">
                 <Button
                   type="button"
-                  disabled={evaluate.isPending}
+                  disabled={evaluate.isPending || !docsComplete || !quizComplete}
                   onClick={async () => {
                     setActionError(null);
                     try {
-                      await evaluate.mutateAsync();
+                      const result = await evaluate.mutateAsync();
+                      if (result.openedViolations) {
+                        setSoftWarn(
+                          `Opened ${result.openedViolations} violation(s) from FAIL controls — continue to remediation after this step.`,
+                        );
+                      }
                     } catch (err) {
                       setActionError(
                         err instanceof ApiError
@@ -992,15 +1014,20 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     }
                   }}
                 >
-                  {evaluate.isPending ? "Evaluating…" : "Evaluate controls"}
+                  {evaluate.isPending ? "Evaluating…" : "Evaluate readiness"}
                 </Button>
               </Can>
+              {!docsComplete || !quizComplete ? (
+                <p className="text-[12px] text-warn">
+                  Documents and questionnaire must be complete before evaluate.
+                </p>
+              ) : null}
 
               {report ? (
                 <>
                   <div className="rounded-sm border border-border bg-surface p-5">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-                      Compliance score
+                      Readiness score
                     </p>
                     <p className="mt-1 text-4xl font-semibold text-ink">
                       {report.score}
@@ -1011,6 +1038,23 @@ export function AssessmentWizard({ assessmentId }: Props) {
                       Unknown {report.summary.unknown} · N/A{" "}
                       {report.summary.notApplicable}
                     </p>
+                    {report.summary.evidenceCeilingApplied &&
+                    report.summary.ceilingReason ? (
+                      <p className="mt-2 text-[12px] text-warn">
+                        {report.summary.ceilingReason}
+                      </p>
+                    ) : null}
+                    <p className="mt-2 text-[12px] text-ink-3">
+                      {report.disclaimer ?? report.summary.disclaimer}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button asChild size="sm" variant="secondary">
+                        <Link href="/violations">Open violations</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="secondary">
+                        <Link href="/remediation">Open remediation</Link>
+                      </Button>
+                    </div>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {report.results.map((r) => (
@@ -1033,8 +1077,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </>
               ) : reportMissing ? (
                 <p className="text-[13px] text-ink-3">
-                  No report yet — run Evaluate after documents, answers, and CLI
-                  evidence are in place.
+                  No readiness report yet — complete docs + questionnaire, prefer
+                  a CLI scan, then run Evaluate.
                 </p>
               ) : (
                 <p className="text-[13px] text-ink-3">
@@ -1046,6 +1090,11 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
           {currentStep.id === "version" ? (
             <div className="space-y-5">
+              <p className="text-[13px] text-ink-2">
+                Create a version after you have a readiness report. The prior
+                score/results freeze into a snapshot. Then close remediation
+                tasks, re-run the CLI, and evaluate again on the new version.
+              </p>
               <Can perm="assessment:update">
                 <div className="flex flex-wrap items-end gap-3 rounded-sm border border-border bg-surface p-4 sm:p-5">
                   <Field
@@ -1067,10 +1116,15 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     onClick={async () => {
                       setActionError(null);
                       try {
-                        await createVersion.mutateAsync({
+                        const created = await createVersion.mutateAsync({
                           label: versionLabel || undefined,
                         });
                         setVersionLabel("");
+                        if (created.frozenPriorScore != null) {
+                          setSoftWarn(
+                            `Frozen prior readiness ${created.frozenPriorScore} from v${created.frozenFromVersion}. New version is ready for re-scan.`,
+                          );
+                        }
                       } catch (err) {
                         setActionError(
                           err instanceof ApiError
@@ -1125,13 +1179,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
             Back
           </Button>
           <div className="flex items-center gap-2">
-            {softWarn ? (
+            {softWarn && !isHardGate(currentStep.id) ? (
               <Button
                 type="button"
                 variant="secondary"
                 onClick={() => advance(true)}
               >
-                Skip for now
+                Continue anyway
               </Button>
             ) : null}
             <Button type="button" onClick={() => advance(false)}>

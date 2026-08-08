@@ -12,7 +12,7 @@ import type {
 /**
  * Evidence API — mirrors dpdpos_backend/src/modules/evidence/routes/evidence.routes.ts
  * exactly, including the oddities: the list endpoint returns the paged shape
- * *inside* `data` (normalized by apiList), and the export pack returns a job id
+ * with envelope `meta.pagination` (normalized by apiList), and the export pack returns a job id
  * with no status-poll endpoint exposed (§9.10).
  */
 export const evidenceApi = {

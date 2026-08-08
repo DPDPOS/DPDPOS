@@ -46,16 +46,31 @@ export async function api<T>(
 
 /**
  * Server-paginated list call — unwraps the envelope AND the pagination meta.
- * The backend sends the pagination object flat in `meta` for most modules
- * (`sendSuccess(res, items, 200, { pagination })` shaped), but the evidence
- * and reports modules return the paged shape *inside* `data` with no meta
- * (`{ items|data, total, page, pageSize }`). Both are normalized here so
- * feature code always receives `{ items, meta }` — one unwrap layer, never
- * per-request handling.
+ * Canonical backend shape:
+ *   `{ success, data: T[], meta: { pagination: { page, pageSize, total, totalPages } } }`
+ * Legacy shapes (pagination inside `data`) are still accepted during migration.
  */
 export interface ListResult<T> {
   items: T[];
   meta: PaginationMeta;
+}
+
+function asPaginationMeta(value: {
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  totalPages?: number;
+}): PaginationMeta | null {
+  if (typeof value.total !== "number") return null;
+  const page = value.page ?? 1;
+  const pageSize = value.pageSize ?? 20;
+  return {
+    page,
+    pageSize,
+    total: value.total,
+    totalPages:
+      value.totalPages ?? Math.max(1, Math.ceil(value.total / Math.max(1, pageSize))),
+  };
 }
 
 export async function apiList<T>(
@@ -64,12 +79,19 @@ export async function apiList<T>(
 ): Promise<ListResult<T>> {
   const { data, meta } = await requestEnvelope<unknown>(path, options, false);
 
-  // Variant A — `{ data: [...], meta: { page, pageSize, total, totalPages } }`.
-  if (Array.isArray(data) && meta && typeof meta.page === "number") {
-    return { items: data as T[], meta };
+  // Canonical — `{ data: [...], meta: { pagination: {...} } }`.
+  if (Array.isArray(data) && meta?.pagination) {
+    const parsed = asPaginationMeta(meta.pagination);
+    if (parsed) return { items: data as T[], meta: parsed };
   }
 
-  // Variant B — `{ data: { items: [...] | data: [...], total, page, pageSize } }`.
+  // Legacy flat meta — `{ data: [...], meta: { page, pageSize, total, totalPages } }`.
+  if (Array.isArray(data) && meta) {
+    const parsed = asPaginationMeta(meta);
+    if (parsed) return { items: data as T[], meta: parsed };
+  }
+
+  // Legacy boxed data — pagination fields inside `data`.
   if (data && typeof data === "object" && !Array.isArray(data)) {
     const boxed = data as {
       items?: T[];
@@ -85,33 +107,13 @@ export async function apiList<T>(
       };
     };
     const items = boxed.items ?? boxed.data;
-    // Variant C — `{ data: { items: [...], pagination: { page, pageSize,
-    // total, totalPages } } }` (notifications service shape).
-    if (Array.isArray(items) && boxed.pagination && typeof boxed.pagination.total === "number") {
-      return {
-        items,
-        meta: {
-          page: boxed.pagination.page ?? 1,
-          pageSize: boxed.pagination.pageSize ?? items.length,
-          total: boxed.pagination.total,
-          totalPages:
-            boxed.pagination.totalPages ??
-            Math.max(1, Math.ceil(boxed.pagination.total / (boxed.pagination.pageSize ?? items.length))),
-        },
-      };
+    if (Array.isArray(items) && boxed.pagination) {
+      const parsed = asPaginationMeta(boxed.pagination);
+      if (parsed) return { items, meta: parsed };
     }
-    if (Array.isArray(items) && typeof boxed.total === "number") {
-      const page = boxed.page ?? 1;
-      const pageSize = boxed.pageSize ?? items.length;
-      return {
-        items,
-        meta: {
-          page,
-          pageSize,
-          total: boxed.total,
-          totalPages: Math.max(1, Math.ceil(boxed.total / pageSize)),
-        },
-      };
+    if (Array.isArray(items)) {
+      const parsed = asPaginationMeta(boxed);
+      if (parsed) return { items, meta: parsed };
     }
   }
 

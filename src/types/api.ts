@@ -32,10 +32,12 @@ export interface PaginationMeta {
 }
 
 /**
- * Envelope `meta` — the backend sends the pagination object flat
- * (`sendSuccess(res, items, 200, result.meta)` where meta = buildPaginationMeta).
+ * Envelope `meta` — canonical backend shape is nested pagination
+ * (`sendSuccess(res, items, 200, { pagination: buildPaginationMeta(...) })`).
  */
-export type ApiMeta = PaginationMeta;
+export type ApiMeta = {
+  pagination?: PaginationMeta;
+} & Partial<PaginationMeta>;
 
 export type ApiEnvelope<T> =
   | { success: true; data: T; meta?: ApiMeta }
