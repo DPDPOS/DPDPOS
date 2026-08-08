@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils/cn";
 
 /**
  * Phase 0 demo — wires the API client + envelope + query keys to a real
- * backend endpoint (GET /api/v1/healthz via the /api rewrite).
+ * backend endpoint. The backend serves /healthz at its root (not under
+ * /api/v1); next.config.ts rewrites /api/healthz -> backend /healthz.
  */
 export function BackendStatus() {
   const { data, isFetching, isError, error, refetch } = useQuery({
@@ -36,7 +37,7 @@ export function BackendStatus() {
           ? "border-pass/20 bg-pass-bg text-pass"
           : "border-fail/20 bg-fail-bg text-fail",
       )}
-      title="Backend health (GET /api/v1/healthz)"
+      title="Backend health (GET /healthz via the /api rewrite)"
     >
       <span
         aria-hidden
