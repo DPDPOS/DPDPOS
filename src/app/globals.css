@@ -1,0 +1,104 @@
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "tailwindcss";
+
+/* ===========================================================================
+   DPDPOS design tokens — implementation plan §4.2
+   Monochrome-first, one restrained accent, tinted status chips, 4/6/8px radii.
+   =========================================================================== */
+@theme {
+  /* Palette — warm neutral (zinc family) */
+  --color-bg: #fafaf9; /* app background */
+  --color-surface: #ffffff; /* cards, tables */
+  --color-surface-2: #f4f4f5; /* table headers, wells, code blocks */
+  --color-border: #e4e4e7;
+  --color-border-strong: #d4d4d8;
+  --color-ink: #18181b; /* primary text */
+  --color-ink-2: #52525b; /* secondary text */
+  --color-ink-3: #a1a1aa; /* muted, metadata */
+
+  /* Accent — deep regulatory blue (primary actions, active nav, focus) */
+  --color-accent: #1d4ed8;
+  --color-accent-hover: #1e40af;
+  --color-accent-soft: #eff6ff;
+
+  /* Status semantics — desaturated, tinted-chip system */
+  --color-pass: #15803d;
+  --color-pass-bg: #f0fdf4;
+  --color-warn: #b45309;
+  --color-warn-bg: #fffbeb;
+  --color-fail: #b91c1c;
+  --color-fail-bg: #fef2f2;
+  --color-info: #1d4ed8;
+  --color-info-bg: #eff6ff;
+  --color-neutral: #52525b;
+  --color-neutral-bg: #f4f4f5;
+
+  /* Type — self-hosted via @fontsource (works offline; the sandbox cannot reach fonts.googleapis.com) */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Radii — nothing above 8px (§4.2) */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  ::selection {
+    background-color: var(--color-accent-soft);
+  }
+}
+
+/* Shared utilities -------------------------------------------------------- */
+
+/* 11px uppercase tracked micro-label — section meta (§4.2) */
+@utility micro-label {
+  font-size: 11px;
+  line-height: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  color: var(--color-ink-3);
+}
+
+/* Tabular numerals for dates, counts, scores — columns must not jitter */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Accessible focus treatment for all interactive elements */
+@layer components {
+  .focus-ring {
+    outline: none;
+  }
+  .focus-ring:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+    outline-offset: 2px;
+  }
+  .focus-ring-danger:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-fail) 55%, transparent);
+    outline-offset: 2px;
+  }
+}
