@@ -50,12 +50,19 @@ export interface AppRoute {
   permission?: string;
   /** Build phase that ships the screen (1 = shipped with Phase 1 shell). */
   phase: number;
+  /** Screen exists in the current build — false keeps the item disabled. */
+  shipped?: boolean;
   /** Match pathname prefix instead of exact equality. */
   prefixMatch?: boolean;
 }
 
+/** True when the route's screen exists and is reachable at this build phase. */
+export function isRouteLive(route: AppRoute): boolean {
+  return Boolean(route.shipped) && route.phase <= CURRENT_PHASE;
+}
+
 /** Build phase shipped so far — later-phase nav items render disabled. */
-export const CURRENT_PHASE = 2;
+export const CURRENT_PHASE = 4;
 
 export const NAV_GROUPS: NavGroup[] = [
   "Overview",
@@ -75,6 +82,7 @@ export const APP_ROUTES: AppRoute[] = [
     group: "Overview",
     icon: LayoutDashboard,
     phase: 1,
+    shipped: true,
   },
 
   // Programme ---------------------------------------------------------------
@@ -86,6 +94,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: BookOpen,
     permission: "framework:read",
     phase: 3,
+    shipped: true,
   },
   {
     href: "/framework/roadmap",
@@ -95,6 +104,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: Map,
     permission: "framework:read",
     phase: 3,
+    shipped: true,
   },
   {
     href: "/controls",
@@ -104,6 +114,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: ShieldCheck,
     permission: "control:read",
     phase: 3,
+    shipped: true,
   },
   {
     href: "/requirements",
@@ -113,6 +124,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: ListChecks,
     permission: "requirement:read",
     phase: 3,
+    shipped: true,
   },
 
   // Operations --------------------------------------------------------------
@@ -124,6 +136,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: Database,
     permission: "data_asset:read",
     phase: 4,
+    shipped: true,
   },
   {
     href: "/processing",
@@ -133,6 +146,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: GitBranch,
     permission: "processing_activity:read",
     phase: 4,
+    shipped: true,
   },
   {
     href: "/notices",

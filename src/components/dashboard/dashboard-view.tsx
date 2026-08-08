@@ -89,9 +89,11 @@ function DashboardBody({ data }: { data: DashboardOverview }) {
           title="Your compliance programme hasn't been built yet"
           body="Generate a framework from your profile to light up the score, violations, evidence and consent metrics on this board."
           action={
-            <Button variant="secondary" size="sm" disabled title="Arrives in Phase 3">
-              Build your framework
-              <ArrowUpRight className="size-3.5" aria-hidden />
+            <Button variant="secondary" size="sm" asChild>
+              <Link href="/framework">
+                Build your framework
+                <ArrowUpRight className="size-3.5" aria-hidden />
+              </Link>
             </Button>
           }
         />

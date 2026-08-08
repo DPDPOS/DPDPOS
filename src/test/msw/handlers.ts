@@ -3,9 +3,16 @@ import { DEMO_CREDENTIALS } from "@/features/auth/demo-credentials";
 import {
   MFA_USER_EMAIL,
   MFA_USER_PASSWORD,
+  activityRows,
   analyticsOverview,
+  controlRows,
+  dataAssetRows,
+  departmentRows,
+  generatedFramework,
+  requirementRows,
   testTokens,
   testUser,
+  userRows,
 } from "./fixtures";
 
 /**
@@ -194,6 +201,287 @@ export const handlers = [
         passed: analyticsOverview.complianceScore.passed,
         failed: analyticsOverview.complianceScore.failed,
       },
+    }),
+  ),
+
+  // ---- Framework -----------------------------------------------------------
+  http.post("/api/framework/generate", () =>
+    HttpResponse.json({ success: true, data: generatedFramework }, { status: 201 }),
+  ),
+
+  http.get("/api/framework/roadmap", () =>
+    HttpResponse.json({ success: true, data: generatedFramework }),
+  ),
+
+  http.post("/api/framework/publish", () =>
+    HttpResponse.json({
+      success: true,
+      data: {
+        ...generatedFramework,
+        status: "PUBLISHED",
+        publishedAt: "2026-08-08T10:00:00.000Z",
+      },
+    }),
+  ),
+
+  // ---- Controls ------------------------------------------------------------
+  http.get("/api/controls", ({ request }) => {
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status");
+    const page = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
+    const filtered = status
+      ? controlRows.filter((row) => row.status === status)
+      : controlRows;
+    return HttpResponse.json({
+      success: true,
+      data: filtered.slice((page - 1) * pageSize, page * pageSize),
+      meta: {
+        page,
+        pageSize,
+        total: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    });
+  }),
+
+  http.post("/api/controls", async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const created = {
+      id: `c-${Date.now()}`,
+      organizationId: DEMO_CREDENTIALS.organizationId,
+      status: "NOT_STARTED",
+      ownerUserId: null,
+      createdAt: "2026-08-08T10:00:00.000Z",
+      updatedAt: "2026-08-08T10:00:00.000Z",
+      ...body,
+    };
+    controlRows.push(created as never);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.patch("/api/controls/:id", async ({ request, params }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const index = controlRows.findIndex((row) => row.id === params.id);
+    if (index === -1) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Control not found" },
+        },
+        { status: 404 },
+      );
+    }
+    controlRows[index] = { ...controlRows[index], ...body, updatedAt: "2026-08-08T10:00:00.000Z" };
+    return HttpResponse.json({ success: true, data: controlRows[index] });
+  }),
+
+  // ---- Requirements --------------------------------------------------------
+  http.get("/api/requirements", ({ request }) => {
+    const url = new URL(request.url);
+    const unmapped = url.searchParams.get("unmapped") === "true";
+    const page = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
+    const filtered = unmapped
+      ? requirementRows.filter((row) => row.controlId === null)
+      : requirementRows;
+    return HttpResponse.json({
+      success: true,
+      data: filtered.slice((page - 1) * pageSize, page * pageSize),
+      meta: {
+        page,
+        pageSize,
+        total: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    });
+  }),
+
+  http.post("/api/requirements/:id/map", async ({ request, params }) => {
+    const body = (await request.json()) as { controlId: string };
+    const requirement = requirementRows.find((row) => row.id === params.id);
+    if (!requirement) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Requirement not found" },
+        },
+        { status: 404 },
+      );
+    }
+    requirement.controlId = body.controlId;
+    requirement.updatedAt = "2026-08-08T10:00:00.000Z";
+    return HttpResponse.json({ success: true, data: requirement });
+  }),
+
+  // ---- Inventory: data assets ------------------------------------------------
+  // The backend returns these as bare arrays (unpaginated list endpoints).
+  http.get("/api/data-assets", () =>
+    HttpResponse.json({ success: true, data: dataAssetRows }),
+  ),
+
+  http.get("/api/data-assets/:id", ({ params }) => {
+    const asset = dataAssetRows.find((row) => row.id === params.id);
+    if (!asset) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Data asset not found" },
+        },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({ success: true, data: asset });
+  }),
+
+  http.post("/api/data-assets", async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const created = {
+      id: `a-${Date.now()}`,
+      status: "ACTIVE",
+      createdAt: "2026-08-08T10:00:00.000Z",
+      updatedAt: "2026-08-08T10:00:00.000Z",
+      ...body,
+    };
+    dataAssetRows.push(created as never);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.patch("/api/data-assets/:id", async ({ request, params }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const index = dataAssetRows.findIndex((row) => row.id === params.id);
+    if (index === -1) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Data asset not found" },
+        },
+        { status: 404 },
+      );
+    }
+    dataAssetRows[index] = {
+      ...dataAssetRows[index],
+      ...body,
+      updatedAt: "2026-08-08T10:00:00.000Z",
+    };
+    return HttpResponse.json({ success: true, data: dataAssetRows[index] });
+  }),
+
+  // Soft archive — status flips to ARCHIVED, row stays for traceability.
+  http.delete("/api/data-assets/:id", ({ params }) => {
+    const index = dataAssetRows.findIndex((row) => row.id === params.id);
+    if (index === -1) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Data asset not found" },
+        },
+        { status: 404 },
+      );
+    }
+    dataAssetRows[index] = {
+      ...dataAssetRows[index],
+      status: "ARCHIVED",
+      updatedAt: "2026-08-08T10:00:00.000Z",
+    };
+    return HttpResponse.json({ success: true, data: dataAssetRows[index] });
+  }),
+
+  // ---- Inventory: processing activities --------------------------------------
+  http.get("/api/processing-activities", ({ request }) => {
+    const url = new URL(request.url);
+    const dataAssetId = url.searchParams.get("dataAssetId");
+    const rows = dataAssetId
+      ? activityRows.filter((row) => row.dataAssetId === dataAssetId)
+      : activityRows;
+    return HttpResponse.json({ success: true, data: rows });
+  }),
+
+  http.get("/api/processing-activities/:id", ({ params }) => {
+    const activity = activityRows.find((row) => row.id === params.id);
+    if (!activity) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Processing activity not found" },
+        },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({ success: true, data: activity });
+  }),
+
+  http.post("/api/processing-activities", async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const created = {
+      id: `pa-${Date.now()}`,
+      createdAt: "2026-08-08T10:00:00.000Z",
+      updatedAt: "2026-08-08T10:00:00.000Z",
+      ...body,
+    };
+    activityRows.push(created as never);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.patch("/api/processing-activities/:id", async ({ request, params }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const index = activityRows.findIndex((row) => row.id === params.id);
+    if (index === -1) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Processing activity not found" },
+        },
+        { status: 404 },
+      );
+    }
+    activityRows[index] = {
+      ...activityRows[index],
+      ...body,
+      updatedAt: "2026-08-08T10:00:00.000Z",
+    };
+    return HttpResponse.json({ success: true, data: activityRows[index] });
+  }),
+
+  http.delete("/api/processing-activities/:id", ({ params }) => {
+    const index = activityRows.findIndex((row) => row.id === params.id);
+    if (index === -1) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Processing activity not found" },
+        },
+        { status: 404 },
+      );
+    }
+    const [removed] = activityRows.splice(index, 1);
+    return HttpResponse.json({ success: true, data: removed });
+  }),
+
+  // ---- Departments ------------------------------------------------------------
+  http.get("/api/departments", ({ request }) => {
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
+    const sliced = departmentRows.slice((page - 1) * pageSize, page * pageSize);
+    return HttpResponse.json({
+      success: true,
+      data: sliced,
+      meta: {
+        page,
+        pageSize,
+        total: departmentRows.length,
+        totalPages: Math.max(1, Math.ceil(departmentRows.length / pageSize)),
+      },
+    });
+  }),
+
+  // ---- Users ---------------------------------------------------------------
+  http.get("/api/users", () =>
+    HttpResponse.json({
+      success: true,
+      data: userRows,
+      meta: { page: 1, pageSize: 100, total: userRows.length, totalPages: 1 },
     }),
   ),
 

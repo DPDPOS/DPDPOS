@@ -60,11 +60,27 @@ describe("Sidebar", () => {
       "href",
       "/dashboard",
     );
+    // Phases 3–4 shipped the programme and inventory screens.
+    expect(screen.getByRole("link", { name: "Controls" })).toHaveAttribute(
+      "href",
+      "/controls",
+    );
+    expect(screen.getByRole("link", { name: "Obligations" })).toHaveAttribute(
+      "href",
+      "/requirements",
+    );
+    expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
+      "href",
+      "/inventory",
+    );
+    expect(screen.getByRole("link", { name: "Processing" })).toHaveAttribute(
+      "href",
+      "/processing",
+    );
 
-    // Upcoming routes render disabled with a phase chip.
-    const controls = screen.getByText("Controls");
-    expect(controls.closest("[aria-disabled='true']")).not.toBeNull();
-    expect(screen.getAllByText("P3").length).toBeGreaterThan(0);
+    // Unshipped current-phase routes (notices, consent, rights) say "Soon";
+    // later phases keep their phase chip.
+    expect(screen.getAllByText("Soon").length).toBeGreaterThan(0);
     expect(screen.getAllByText("P5").length).toBeGreaterThan(0);
   });
 
@@ -88,7 +104,9 @@ describe("Sidebar", () => {
     render(<Sidebar />);
 
     expect(screen.queryByText("Controls")).not.toBeInTheDocument();
-    expect(screen.getByTitle("Controls — arriving in Phase 3")).toBeInTheDocument();
+    expect(
+      screen.getByTitle("Evidence — arriving in Phase 5"),
+    ).toBeInTheDocument();
     expect(screen.getByTitle(/Dashboard/)).toBeInTheDocument();
   });
 });

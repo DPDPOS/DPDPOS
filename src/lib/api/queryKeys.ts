@@ -14,38 +14,50 @@ export const queryKeys = {
   rightsMetrics: ["analytics", "rights-requests"] as const,
   consentMetrics: ["analytics", "consent"] as const,
   validationSummary: ["analytics", "validations"] as const,
-  framework: (id?: string) => ["framework", id ?? "latest"] as const,
+  // Parameterised keys return the bare prefix when called without a filter:
+  // invalidateQueries matches by array prefix, so ["framework"] invalidates
+  // every ["framework", …] query, whereas a trailing undefined element would
+  // not match (React Query v5 hashes undefined to null and prefix-matches
+  // strictly).
+  framework: (id?: string) =>
+    id ? (["framework", id] as const) : (["framework"] as const),
   controls: (filter?: Record<string, unknown>) =>
-    ["controls", filter] as const,
+    filter ? (["controls", filter] as const) : (["controls"] as const),
   requirements: (filter?: Record<string, unknown>) =>
-    ["requirements", filter] as const,
+    filter ? (["requirements", filter] as const) : (["requirements"] as const),
   dataAssets: (filter?: Record<string, unknown>) =>
-    ["data-assets", filter] as const,
+    filter ? (["data-assets", filter] as const) : (["data-assets"] as const),
   processingActivities: (assetId?: string) =>
-    ["processing-activities", assetId] as const,
+    assetId
+      ? (["processing-activities", assetId] as const)
+      : (["processing-activities"] as const),
   notices: ["notices"] as const,
   consentRecords: (filter?: Record<string, unknown>) =>
-    ["consent-records", filter] as const,
+    filter
+      ? (["consent-records", filter] as const)
+      : (["consent-records"] as const),
   rightsRequests: (filter?: Record<string, unknown>) =>
-    ["rights-requests", filter] as const,
+    filter ? (["rights-requests", filter] as const) : (["rights-requests"] as const),
   validationRules: (filter?: Record<string, unknown>) =>
-    ["validation-rules", filter] as const,
+    filter ? (["validation-rules", filter] as const) : (["validation-rules"] as const),
   validationRuns: (filter?: Record<string, unknown>) =>
-    ["validation-runs", filter] as const,
+    filter ? (["validation-runs", filter] as const) : (["validation-runs"] as const),
   violations: (filter?: Record<string, unknown>) =>
-    ["violations", filter] as const,
+    filter ? (["violations", filter] as const) : (["violations"] as const),
   violation: (id: string) => ["violations", "detail", id] as const,
   remediation: (filter?: Record<string, unknown>) =>
-    ["remediation", filter] as const,
+    filter ? (["remediation", filter] as const) : (["remediation"] as const),
   evidence: (filter?: Record<string, unknown>) =>
-    ["evidence", filter] as const,
+    filter ? (["evidence", filter] as const) : (["evidence"] as const),
   reports: (filter?: Record<string, unknown>) =>
-    ["reports", filter] as const,
-  audit: (filter?: Record<string, unknown>) => ["audit", filter] as const,
+    filter ? (["reports", filter] as const) : (["reports"] as const),
+  audit: (filter?: Record<string, unknown>) =>
+    filter ? (["audit", filter] as const) : (["audit"] as const),
   notifications: (filter?: Record<string, unknown>) =>
-    ["notifications", filter] as const,
+    filter ? (["notifications", filter] as const) : (["notifications"] as const),
   unreadCount: ["notifications", "unread-count"] as const,
-  users: (filter?: Record<string, unknown>) => ["users", filter] as const,
+  users: (filter?: Record<string, unknown>) =>
+    filter ? (["users", filter] as const) : (["users"] as const),
   roles: ["roles"] as const,
   departments: ["departments"] as const,
   organization: (id: string) => ["organizations", id] as const,

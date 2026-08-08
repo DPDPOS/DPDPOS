@@ -23,6 +23,7 @@ import { queryKeys } from "@/lib/api/queryKeys";
 import {
   accessibleRoutes,
   CURRENT_PHASE,
+  isRouteLive,
   routeForPathname,
 } from "@/lib/navigation/routes";
 import { useSessionStore } from "@/state/session";
@@ -183,24 +184,23 @@ export function Topbar() {
               <ul className="max-h-72 overflow-y-auto p-1.5">
                 {searchResults.map((result) => {
                   const Icon = result.icon;
-                  const disabled = result.phase > CURRENT_PHASE;
                   return (
                     <li key={result.href}>
-                      {disabled ? (
-                        <div
-                          aria-disabled="true"
-                          className="flex cursor-not-allowed items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] text-ink-3"
-                          title={`${result.label} — arriving in Phase ${result.phase}`}
-                        >
-                          <Icon className="size-4 shrink-0" aria-hidden />
-                          <span className="min-w-0 flex-1 truncate">
-                            {result.label}
-                          </span>
-                          <span className="shrink-0 rounded-sm border border-border px-1 font-mono text-[10px] uppercase text-ink-3">
-                            P{result.phase}
-                          </span>
-                        </div>
-                      ) : (
+              {!isRouteLive(result) ? (
+                <div
+                  aria-disabled="true"
+                  className="flex cursor-not-allowed items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] text-ink-3"
+                  title={`${result.label} — arriving in Phase ${result.phase}`}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">
+                    {result.label}
+                  </span>
+                  <span className="shrink-0 rounded-sm border border-border px-1 font-mono text-[10px] uppercase text-ink-3">
+                    {result.phase > CURRENT_PHASE ? `P${result.phase}` : "Soon"}
+                  </span>
+                </div>
+              ) : (
                         <Link
                           href={result.href}
                           onClick={close}

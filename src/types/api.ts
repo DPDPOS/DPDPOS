@@ -31,9 +31,11 @@ export interface PaginationMeta {
   totalPages: number;
 }
 
-export interface ApiMeta {
-  pagination?: PaginationMeta;
-}
+/**
+ * Envelope `meta` — the backend sends the pagination object flat
+ * (`sendSuccess(res, items, 200, result.meta)` where meta = buildPaginationMeta).
+ */
+export type ApiMeta = PaginationMeta;
 
 export type ApiEnvelope<T> =
   | { success: true; data: T; meta?: ApiMeta }

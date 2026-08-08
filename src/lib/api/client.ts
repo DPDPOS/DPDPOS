@@ -1,4 +1,4 @@
-import type { ApiEnvelope } from "@/types/api";
+import type { ApiEnvelope, ApiMeta, PaginationMeta } from "@/types/api";
 import { useSessionStore } from "@/state/session";
 import { refreshAccessToken } from "@/lib/auth/refresh";
 import { ApiError } from "./errors";
@@ -40,14 +40,45 @@ export async function api<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  return request<T>(path, options, false);
+  const { data } = await requestEnvelope<T>(path, options, false);
+  return data;
 }
 
-async function request<T>(
+/**
+ * Server-paginated list call — unwraps the envelope AND the pagination meta
+ * (`sendSuccess(res, items, 200, meta)` on the backend).
+ */
+export interface ListResult<T> {
+  items: T[];
+  meta: PaginationMeta;
+}
+
+export async function apiList<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<ListResult<T>> {
+  const { data, meta } = await requestEnvelope<T[]>(path, options, false);
+  // The backend's list envelope carries the pagination object flat in `meta`.
+  if (!meta || typeof meta.page !== "number") {
+    throw new ApiError({
+      code: "INTERNAL_ERROR",
+      message: "Malformed paginated API response",
+      status: 0,
+    });
+  }
+  return { items: data, meta };
+}
+
+interface EnvelopeResult<T> {
+  data: T;
+  meta?: ApiMeta;
+}
+
+async function requestEnvelope<T>(
   path: string,
   options: ApiRequestOptions,
   retried: boolean,
-): Promise<T> {
+): Promise<EnvelopeResult<T>> {
   const { body, query, headers, ...init } = options;
   const url = `${BASE_URL}${path}${buildQuery(query)}`;
   const accessToken = useSessionStore.getState().accessToken;
@@ -76,7 +107,7 @@ async function request<T>(
   if (res.status === 401 && !retried && !path.startsWith("/auth/")) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
-      return request<T>(path, options, true);
+      return requestEnvelope<T>(path, options, true);
     }
     useSessionStore.getState().clear();
     throw new ApiError({
@@ -127,11 +158,14 @@ async function request<T>(
       status: res.status,
     });
   }
-  return envelope.data;
+  return { data: envelope.data, meta: envelope.meta };
 }
 
 export const apiClient = {
   get: <T>(path: string, query?: QueryParams) => api<T>(path, { query }),
+  /** List call — unwraps `{ items, meta }` from the envelope. */
+  list: <T>(path: string, query?: QueryParams) =>
+    apiList<T>(path, { query }),
   post: <T>(path: string, body?: unknown, query?: QueryParams) =>
     api<T>(path, { method: "POST", body, query }),
   patch: <T>(path: string, body?: unknown, query?: QueryParams) =>

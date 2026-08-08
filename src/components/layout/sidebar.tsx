@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   accessibleRoutes,
   CURRENT_PHASE,
+  isRouteLive,
   NAV_GROUPS,
   type AppRoute,
 } from "@/lib/navigation/routes";
@@ -134,6 +135,7 @@ export function Sidebar() {
               group: "Overview",
               icon: Frame,
               phase: 1,
+              shipped: true,
             }}
             active={pathname === "/gallery"}
             collapsed={collapsed}
@@ -159,18 +161,23 @@ interface NavItemProps {
 
 function NavItem({ route, active, collapsed, onNavigate }: NavItemProps) {
   const Icon = route.icon;
-  const disabled = route.phase > CURRENT_PHASE;
+  const live = isRouteLive(route);
+  const chip = !live
+    ? route.phase > CURRENT_PHASE
+      ? `P${route.phase}`
+      : "Soon"
+    : null;
   const classes = cn(
     "group relative flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-[13px] transition-colors duration-150",
     collapsed && "justify-center px-0",
-    disabled
+    !live
       ? "cursor-not-allowed text-ink-3"
       : active
         ? "font-medium text-ink"
         : "text-ink-2 hover:bg-surface-2 hover:text-ink",
   );
 
-  if (disabled) {
+  if (!live) {
     return (
       <div
         className={classes}
@@ -187,7 +194,7 @@ function NavItem({ route, active, collapsed, onNavigate }: NavItemProps) {
                 active && "border-border-strong",
               )}
             >
-              P{route.phase}
+              {chip}
             </span>
           </>
         ) : null}
