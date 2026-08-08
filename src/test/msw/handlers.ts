@@ -5,10 +5,12 @@ import {
   MFA_USER_PASSWORD,
   activityRows,
   analyticsOverview,
+  consentRows,
   controlRows,
   dataAssetRows,
   departmentRows,
   generatedFramework,
+  noticeRows,
   requirementRows,
   testTokens,
   testUser,
@@ -456,6 +458,133 @@ export const handlers = [
     }
     const [removed] = activityRows.splice(index, 1);
     return HttpResponse.json({ success: true, data: removed });
+  }),
+
+  // ---- Notices ----------------------------------------------------------------
+  http.get("/api/notices", () =>
+    HttpResponse.json({ success: true, data: noticeRows }),
+  ),
+
+  http.get("/api/notices/:id", ({ params }) => {
+    const notice = noticeRows.find((row) => row.id === params.id);
+    if (!notice) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Notice not found" },
+        },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({ success: true, data: notice });
+  }),
+
+  http.post("/api/notices", async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const created = {
+      id: `n-${Date.now()}`,
+      version: 1,
+      publishedBy: "usr_demo_admin",
+      createdAt: "2026-08-08T10:00:00.000Z",
+      updatedAt: "2026-08-08T10:00:00.000Z",
+      ...body,
+    };
+    noticeRows.push(created as never);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.delete("/api/notices/:id", ({ params }) => {
+    const index = noticeRows.findIndex((row) => row.id === params.id);
+    if (index === -1) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Notice not found" },
+        },
+        { status: 404 },
+      );
+    }
+    const [removed] = noticeRows.splice(index, 1);
+    return HttpResponse.json({ success: true, data: removed });
+  }),
+
+  // ---- Consent records --------------------------------------------------------
+  http.get("/api/consent-records", ({ request }) => {
+    const url = new URL(request.url);
+    let rows = consentRows;
+    const consentState = url.searchParams.get("consentState");
+    if (consentState) {
+      rows = rows.filter((row) => row.consentState === consentState);
+    }
+    const dataAssetId = url.searchParams.get("dataAssetId");
+    if (dataAssetId) {
+      rows = rows.filter((row) => row.dataAssetId === dataAssetId);
+    }
+    const noticeId = url.searchParams.get("noticeId");
+    if (noticeId) {
+      rows = rows.filter((row) => row.noticeId === noticeId);
+    }
+    const identifier = url.searchParams.get("dataSubjectIdentifier");
+    if (identifier) {
+      rows = rows.filter((row) =>
+        row.dataSubjectIdentifier.toLowerCase().includes(identifier.toLowerCase()),
+      );
+    }
+    return HttpResponse.json({ success: true, data: rows });
+  }),
+
+  http.get("/api/consent-records/:id", ({ params }) => {
+    const record = consentRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Consent record not found" },
+        },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({ success: true, data: record });
+  }),
+
+  http.post("/api/consent-records", async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const created = {
+      id: `cn-${Date.now()}`,
+      consentState: "GRANTED",
+      withdrawnAt: null,
+      createdAt: "2026-08-08T10:00:00.000Z",
+      updatedAt: "2026-08-08T10:00:00.000Z",
+      ...body,
+    };
+    consentRows.push(created as never);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.post("/api/consent-records/:id/withdraw", ({ params }) => {
+    const record = consentRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Consent record not found" },
+        },
+        { status: 404 },
+      );
+    }
+    if (record.consentState === "WITHDRAWN") {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: "Consent is already withdrawn" },
+        },
+        { status: 409 },
+      );
+    }
+    record.consentState = "WITHDRAWN";
+    record.withdrawnAt = "2026-08-08T10:00:00.000Z";
+    record.updatedAt = "2026-08-08T10:00:00.000Z";
+    return HttpResponse.json({ success: true, data: record });
   }),
 
   // ---- Departments ------------------------------------------------------------

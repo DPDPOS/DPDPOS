@@ -1,8 +1,10 @@
 import type { AuthMeResponse, AuthTokens } from "@/features/auth/types";
 import type { DashboardOverview } from "@/features/analytics/types";
 import type { ControlResponse } from "@/features/controls/types";
+import type { ConsentRecordResponse } from "@/features/consent/types";
 import type { DataAssetResponse } from "@/features/dataAssets/types";
 import type { FrameworkResponse } from "@/features/framework/types";
+import type { NoticeResponse } from "@/features/notices/types";
 import type { ProcessingActivityResponse } from "@/features/processingActivities/types";
 import type { RequirementResponse } from "@/features/requirements/types";
 import type { UserResponse } from "@/features/users/types";
@@ -70,6 +72,12 @@ export const adminUser: AuthMeResponse = {
     "processing_activity:create",
     "processing_activity:update",
     "processing_activity:delete",
+    "notice:read",
+    "notice:create",
+    "notice:delete",
+    "consent:read",
+    "consent:create",
+    "consent:withdraw",
     "organization:read",
     "data_asset:read",
     "processing_activity:read",
@@ -347,6 +355,87 @@ const seedDepartments: DepartmentResponse[] = [
   },
 ];
 
+/** Generated transparency — versioned notices and consent records. */
+const seedNotices: NoticeResponse[] = [
+  {
+    id: "n0000000-0000-4000-8000-000000000001",
+    title: "Customer data privacy notice",
+    version: 2,
+    content:
+      "We collect your name, contact details and order history to fulfil\ncontracts and meet legal obligations. You may access, correct or erase\nyour data, and withdraw consent at any time. Contact privacy@dpdpos.local.",
+    effectiveFrom: "2026-07-01T00:00:00.000Z",
+    publishedBy: "usr_demo_admin",
+    createdAt: "2026-06-15T09:00:00.000Z",
+    updatedAt: "2026-06-20T09:00:00.000Z",
+  },
+  {
+    id: "n0000000-0000-4000-8000-000000000002",
+    title: "Marketing communications notice",
+    version: 1,
+    content:
+      "With your consent, we send marketing communications about products and\nservices you may like. You can withdraw this consent at any time with\nequal ease to granting it.",
+    effectiveFrom: "2026-07-15T00:00:00.000Z",
+    publishedBy: null,
+    createdAt: "2026-07-10T09:00:00.000Z",
+    updatedAt: "2026-07-10T09:00:00.000Z",
+  },
+];
+
+const seedConsentRecords: ConsentRecordResponse[] = [
+  {
+    id: "cn000000-0000-4000-8000-000000000001",
+    dataSubjectIdentifier: "user@example.com",
+    noticeId: "n0000000-0000-4000-8000-000000000002",
+    dataAssetId: "a0000000-0000-4000-8000-000000000002",
+    purpose: "Marketing emails",
+    consentState: "GRANTED",
+    grantedAt: "2026-07-16T08:30:00.000Z",
+    withdrawnAt: null,
+    proofFileId: null,
+    createdAt: "2026-07-16T08:30:00.000Z",
+    updatedAt: "2026-07-16T08:30:00.000Z",
+  },
+  {
+    id: "cn000000-0000-4000-8000-000000000002",
+    dataSubjectIdentifier: "priya@example.com",
+    noticeId: "n0000000-0000-4000-8000-000000000001",
+    dataAssetId: "a0000000-0000-4000-8000-000000000001",
+    purpose: "Payroll processing",
+    consentState: "GRANTED",
+    grantedAt: "2026-07-02T09:00:00.000Z",
+    withdrawnAt: null,
+    proofFileId: "ev-consent-001",
+    createdAt: "2026-07-02T09:00:00.000Z",
+    updatedAt: "2026-07-02T09:00:00.000Z",
+  },
+  {
+    id: "cn000000-0000-4000-8000-000000000003",
+    dataSubjectIdentifier: "user@example.com",
+    noticeId: "n0000000-0000-4000-8000-000000000002",
+    dataAssetId: null,
+    purpose: "Newsletter subscription",
+    consentState: "WITHDRAWN",
+    grantedAt: "2026-05-01T10:00:00.000Z",
+    withdrawnAt: "2026-07-20T11:15:00.000Z",
+    proofFileId: null,
+    createdAt: "2026-05-01T10:00:00.000Z",
+    updatedAt: "2026-07-20T11:15:00.000Z",
+  },
+  {
+    id: "cn000000-0000-4000-8000-000000000004",
+    dataSubjectIdentifier: "rahul@example.com",
+    noticeId: "n0000000-0000-4000-8000-000000000001",
+    dataAssetId: "a0000000-0000-4000-8000-000000000003",
+    purpose: "Trial participation",
+    consentState: "GRANTED",
+    grantedAt: "2026-07-18T14:00:00.000Z",
+    withdrawnAt: null,
+    proofFileId: "ev-consent-004",
+    createdAt: "2026-07-18T14:00:00.000Z",
+    updatedAt: "2026-07-18T14:00:00.000Z",
+  },
+];
+
 /**
  * Mutable registries the MSW handlers read and write (create/map/update
  * mutate them). Exported as `let` and restored by resetTestFixtures() so
@@ -357,6 +446,8 @@ export let requirementRows: RequirementResponse[] = [...seedRequirementRows];
 export let dataAssetRows: DataAssetResponse[] = [...seedDataAssets];
 export let activityRows: ProcessingActivityResponse[] = [...seedActivities];
 export let departmentRows: DepartmentResponse[] = [...seedDepartments];
+export let noticeRows: NoticeResponse[] = [...seedNotices];
+export let consentRows: ConsentRecordResponse[] = [...seedConsentRecords];
 
 /** Restores the mutable MSW registries to their seed state. */
 export function resetTestFixtures(): void {
@@ -365,6 +456,8 @@ export function resetTestFixtures(): void {
   dataAssetRows = [...seedDataAssets];
   activityRows = [...seedActivities];
   departmentRows = [...seedDepartments];
+  noticeRows = [...seedNotices];
+  consentRows = [...seedConsentRecords];
 }
 
 /** Directory rows for owner comboboxes. */

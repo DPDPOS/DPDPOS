@@ -45,6 +45,8 @@ export interface DataTableProps<T> {
   emptyAction?: React.ReactNode;
   onRowClick?: (row: T) => void;
   rowActions?: (row: T) => React.ReactNode;
+  /** Per-row classes (e.g. muting withdrawn records). */
+  rowClassName?: (row: T) => string | undefined;
   className?: string;
 }
 
@@ -65,6 +67,7 @@ export function DataTable<T>({
   emptyAction,
   onRowClick,
   rowActions,
+  rowClassName,
   className,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState<SortState | null>(null);
@@ -205,6 +208,7 @@ export function DataTable<T>({
                       "border-t border-border transition-colors",
                       onRowClick && "cursor-pointer hover:bg-surface-2/70",
                       rowActions && "group",
+                      rowClassName?.(row),
                     )}
                   >
                     {columns.map((column) => (

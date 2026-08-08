@@ -62,7 +62,7 @@ export function isRouteLive(route: AppRoute): boolean {
 }
 
 /** Build phase shipped so far — later-phase nav items render disabled. */
-export const CURRENT_PHASE = 4;
+export const CURRENT_PHASE = 5;
 
 export const NAV_GROUPS: NavGroup[] = [
   "Overview",
@@ -156,6 +156,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: FileText,
     permission: "notice:read",
     phase: 4,
+    shipped: true,
   },
   {
     href: "/consent",
@@ -165,6 +166,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: Handshake,
     permission: "consent:read",
     phase: 4,
+    shipped: true,
   },
   {
     href: "/rights",

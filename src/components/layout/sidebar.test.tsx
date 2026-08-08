@@ -60,7 +60,7 @@ describe("Sidebar", () => {
       "href",
       "/dashboard",
     );
-    // Phases 3–4 shipped the programme and inventory screens.
+    // Phases 3–5 shipped the programme, inventory and transparency screens.
     expect(screen.getByRole("link", { name: "Controls" })).toHaveAttribute(
       "href",
       "/controls",
@@ -77,11 +77,19 @@ describe("Sidebar", () => {
       "href",
       "/processing",
     );
+    expect(screen.getByRole("link", { name: "Notices" })).toHaveAttribute(
+      "href",
+      "/notices",
+    );
+    expect(screen.getByRole("link", { name: "Consent" })).toHaveAttribute(
+      "href",
+      "/consent",
+    );
 
-    // Unshipped current-phase routes (notices, consent, rights) say "Soon";
-    // later phases keep their phase chip.
+    // Every remaining planned screen is within the build horizon, so they all
+    // say "Soon" — nothing is past the phase horizon any more.
     expect(screen.getAllByText("Soon").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("P5").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^P[1-9]$/)).not.toBeInTheDocument();
   });
 
   it("hides whole areas the user cannot read", () => {
