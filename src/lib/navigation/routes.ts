@@ -62,7 +62,7 @@ export function isRouteLive(route: AppRoute): boolean {
 }
 
 /** Build phase shipped so far — later-phase nav items render disabled. */
-export const CURRENT_PHASE = 8;
+export const CURRENT_PHASE = 9;
 
 export const NAV_GROUPS: NavGroup[] = [
   "Overview",
@@ -268,7 +268,8 @@ export const APP_ROUTES: AppRoute[] = [
     group: "System",
     icon: Users,
     permission: "user:read",
-    phase: 3,
+    phase: 9,
+    shipped: true,
   },
   {
     href: "/roles",
@@ -277,7 +278,8 @@ export const APP_ROUTES: AppRoute[] = [
     group: "System",
     icon: Shield,
     permission: "role:read",
-    phase: 3,
+    phase: 9,
+    shipped: true,
   },
   {
     href: "/departments",
@@ -286,7 +288,8 @@ export const APP_ROUTES: AppRoute[] = [
     group: "System",
     icon: Building2,
     permission: "department:read",
-    phase: 4,
+    phase: 9,
+    shipped: true,
   },
   {
     href: "/settings",
@@ -295,7 +298,8 @@ export const APP_ROUTES: AppRoute[] = [
     group: "System",
     icon: Settings,
     permission: "organization:read",
-    phase: 4,
+    phase: 9,
+    shipped: true,
   },
 ];
 

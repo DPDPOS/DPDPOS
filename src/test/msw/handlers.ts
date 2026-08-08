@@ -11,6 +11,10 @@ import type { ViolationResponse } from "@/features/violations/types";
 import { VIOLATION_TRANSITIONS } from "@/features/violations/types";
 import type { RemediationTaskResponse } from "@/features/remediation/types";
 import { REMEDIATION_TRANSITIONS } from "@/features/remediation/types";
+import type { CreateUserPayload, UpdateUserPayload } from "@/features/users/types";
+import type { CreateRolePayload, UpdateRolePermissionsPayload } from "@/features/roles/types";
+import type { CreateDepartmentPayload } from "@/features/departments/types";
+import type { UpdateOrganizationPayload } from "@/features/organizations/types";
 import {
   MFA_USER_EMAIL,
   MFA_USER_PASSWORD,
@@ -23,9 +27,11 @@ import {
   evidenceRows,
   generatedFramework,
   noticeRows,
+  organizationRow,
   reportRows,
   requirementRows,
   rightsRows,
+  roleRows,
   testTokens,
   testUser,
   userRows,
@@ -987,14 +993,206 @@ export const handlers = [
     });
   }),
 
+  http.post("/api/departments", async ({ request }) => {
+    const body = (await request.json()) as CreateDepartmentPayload;
+    const name = body.name.trim();
+    if (departmentRows.some((d) => d.name.toLowerCase() === name.toLowerCase())) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: "A department with this name already exists" },
+        },
+        { status: 409 },
+      );
+    }
+    const row = {
+      id: `dept_${Math.random().toString(36).slice(2, 10)}`,
+      organizationId: organizationRow.id,
+      name,
+      headUserId: body.headUserId ?? null,
+      createdAt: "2026-08-08T10:00:00.000Z",
+      updatedAt: "2026-08-08T10:00:00.000Z",
+    };
+    departmentRows.push(row);
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
   // ---- Users ---------------------------------------------------------------
-  http.get("/api/users", () =>
-    HttpResponse.json({
+  http.get("/api/users", ({ request }) => {
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
+    const search = (url.searchParams.get("search") ?? "").toLowerCase();
+    const filtered = search
+      ? userRows.filter(
+          (u) =>
+            u.name.toLowerCase().includes(search) ||
+            u.email.toLowerCase().includes(search),
+        )
+      : userRows;
+    const sliced = filtered.slice((page - 1) * pageSize, page * pageSize);
+    return HttpResponse.json({
       success: true,
-      data: userRows,
-      meta: { page: 1, pageSize: 100, total: userRows.length, totalPages: 1 },
-    }),
-  ),
+      data: sliced,
+      meta: {
+        page,
+        pageSize,
+        total: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      },
+    });
+  }),
+
+  http.post("/api/users", async ({ request }) => {
+    const body = (await request.json()) as CreateUserPayload;
+    const email = body.email.trim().toLowerCase();
+    if (userRows.some((u) => u.email.toLowerCase() === email)) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: "A user with this email already exists" },
+        },
+        { status: 409 },
+      );
+    }
+    const now = new Date().toISOString();
+    const row = {
+      id: `usr_${Math.random().toString(36).slice(2, 10)}`,
+      organizationId: organizationRow.id,
+      email,
+      name: body.name.trim(),
+      status: "INVITED",
+      roleIds: body.roleIds ?? [],
+      roleNames: (body.roleIds ?? []).map(
+        (id) => roleRows.find((r) => r.id === id)?.name ?? id,
+      ),
+      lastLoginAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    userRows.push(row);
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  http.patch("/api/users/:id", async ({ request, params }) => {
+    const row = userRows.find((u) => u.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "User not found" } },
+        { status: 404 },
+      );
+    }
+    const body = (await request.json()) as UpdateUserPayload;
+    if (body.name !== undefined) row.name = body.name.trim();
+    if (body.status !== undefined) row.status = body.status;
+    row.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  // ---- Roles ---------------------------------------------------------------
+  http.get("/api/roles", ({ request }) => {
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
+    const sliced = roleRows.slice((page - 1) * pageSize, page * pageSize);
+    return HttpResponse.json({
+      success: true,
+      data: sliced,
+      meta: {
+        page,
+        pageSize,
+        total: roleRows.length,
+        totalPages: Math.max(1, Math.ceil(roleRows.length / pageSize)),
+      },
+    });
+  }),
+
+  http.post("/api/roles", async ({ request }) => {
+    const body = (await request.json()) as CreateRolePayload;
+    const name = body.name.trim();
+    if (roleRows.some((r) => r.name.toLowerCase() === name.toLowerCase())) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: "A role with this name already exists" },
+        },
+        { status: 409 },
+      );
+    }
+    const now = new Date().toISOString();
+    const row = {
+      id: `role_${Math.random().toString(36).slice(2, 10)}`,
+      organizationId: organizationRow.id,
+      name,
+      description: body.description?.trim() || null,
+      permissions: body.permissions,
+      isSystemRole: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    roleRows.push(row);
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  http.patch("/api/roles/:id/permissions", async ({ request, params }) => {
+    const row = roleRows.find((r) => r.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Role not found" } },
+        { status: 404 },
+      );
+    }
+    if (row.isSystemRole) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: "System roles cannot be modified" },
+        },
+        { status: 409 },
+      );
+    }
+    const body = (await request.json()) as UpdateRolePermissionsPayload;
+    row.permissions = body.permissions;
+    row.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  // ---- Organization (settings) ---------------------------------------------
+  http.get("/api/organizations/:id", ({ params }) => {
+    if (params.id !== organizationRow.id) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Organization not found" },
+        },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({ success: true, data: organizationRow });
+  }),
+
+  http.patch("/api/organizations/:id", async ({ request, params }) => {
+    if (params.id !== organizationRow.id) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Organization not found" },
+        },
+        { status: 404 },
+      );
+    }
+    const body = (await request.json()) as UpdateOrganizationPayload;
+    if (body.name !== undefined) organizationRow.name = body.name.trim();
+    if (body.industry !== undefined) organizationRow.industry = body.industry;
+    if (body.companySize !== undefined) organizationRow.companySize = body.companySize;
+    if (body.operatingRegion !== undefined) organizationRow.operatingRegion = body.operatingRegion;
+    if (body.companyType !== undefined) organizationRow.companyType = body.companyType;
+    if (body.maturityLevel !== undefined) organizationRow.maturityLevel = body.maturityLevel;
+    if (body.isSignificantDataFiduciary !== undefined)
+      organizationRow.isSignificantDataFiduciary = body.isSignificantDataFiduciary;
+    organizationRow.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ success: true, data: organizationRow });
+  }),
 
   // ---- Notifications -------------------------------------------------------
   http.get("/api/notifications/unread-count", () =>

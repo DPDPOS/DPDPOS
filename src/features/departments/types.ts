@@ -7,3 +7,9 @@ export interface DepartmentResponse {
   createdAt: string;
   updatedAt: string;
 }
+
+/** Mirrors createDepartmentDtoSchema. */
+export interface CreateDepartmentPayload {
+  name: string;
+  headUserId?: string;
+}

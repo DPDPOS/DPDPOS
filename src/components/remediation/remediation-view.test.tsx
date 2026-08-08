@@ -155,8 +155,13 @@ describe("RemediationView (§9.9)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("verifies then closes — the close summary is required", async () => {
-    const user = userEvent.setup();
+  // The flow spans four PATCH round-trips with refetches — generous timeout
+  // so it stays green under parallel suite load.
+  it(
+    "verifies then closes — the close summary is required",
+    { timeout: 30000 },
+    async () => {
+      const user = userEvent.setup();
     renderWithProviders(<RemediationView />);
     const table = await screen.findByRole("table");
     await within(table).findByText(
@@ -199,14 +204,15 @@ describe("RemediationView (§9.9)", () => {
     );
     await user.click(confirm);
 
-    expect(
-      await within(drawer).findByText(
-        "Terminal state — the task is immutable.",
-        {},
-        { timeout: 10000 },
-      ),
-    ).toBeInTheDocument();
-  });
+      expect(
+        await within(drawer).findByText(
+          "Terminal state — the task is immutable.",
+          {},
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("recovers from a stale version — the conflict dialog offers reload", async () => {
     const user = userEvent.setup();

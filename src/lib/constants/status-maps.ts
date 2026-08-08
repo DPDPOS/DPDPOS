@@ -80,6 +80,10 @@ export const STATUS_TONES: Record<string, Tone> = {
   RETENTION: "warn",
   RIGHTS: "info",
 
+  // MFA status (settings security section)
+  ENABLED: "pass",
+  NOT_ENABLED: "warn",
+
   // Reports / notifications / AI
   GENERATING: "info",
   SENT: "info",
