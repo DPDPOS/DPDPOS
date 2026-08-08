@@ -1,7 +1,7 @@
 /**
  * Frozen permission catalog — mirrored 1:1 from
  * dpdpos_backend/src/shared/constants/permissions.ts (§9.14 roles screen).
- * A unit test asserts the mirror contains exactly the 60 backend strings so
+ * A unit test asserts the mirror contains exactly the backend strings so
  * the two catalogs cannot drift.
  */
 
@@ -87,6 +87,13 @@ export const PERMISSIONS = {
   AI_DRAFT: "ai:draft",
   AUDIT_READ: "audit:read",
   AUDIT_EXPORT: "audit:export",
+
+  // assessment / CLI spine
+  ASSESSMENT_CREATE: "assessment:create",
+  ASSESSMENT_READ: "assessment:read",
+  ASSESSMENT_UPDATE: "assessment:update",
+  ASSESSMENT_EVALUATE: "assessment:evaluate",
+  ASSESSMENT_CLI_TOKEN: "assessment:cli_token",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -140,6 +147,17 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       PERMISSIONS.DEPARTMENT_CREATE,
       PERMISSIONS.DEPARTMENT_READ,
       PERMISSIONS.DEPARTMENT_UPDATE,
+    ],
+  },
+  {
+    id: "assessments",
+    label: "Assessments & CLI",
+    permissions: [
+      PERMISSIONS.ASSESSMENT_CREATE,
+      PERMISSIONS.ASSESSMENT_READ,
+      PERMISSIONS.ASSESSMENT_UPDATE,
+      PERMISSIONS.ASSESSMENT_EVALUATE,
+      PERMISSIONS.ASSESSMENT_CLI_TOKEN,
     ],
   },
   {

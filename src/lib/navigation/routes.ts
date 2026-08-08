@@ -87,6 +87,16 @@ export const APP_ROUTES: AppRoute[] = [
 
   // Programme ---------------------------------------------------------------
   {
+    href: "/assessments",
+    label: "Assessments",
+    description: "Gap assessment, CLI evidence, score and versioned reports",
+    group: "Programme",
+    icon: ClipboardCheck,
+    permission: "assessment:read",
+    phase: 1,
+    shipped: true,
+  },
+  {
     href: "/framework",
     label: "Framework",
     description: "Generate and manage the compliance programme",

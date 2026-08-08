@@ -61,4 +61,14 @@ export const queryKeys = {
   roles: ["roles"] as const,
   departments: ["departments"] as const,
   organization: (id: string) => ["organizations", id] as const,
+  assessments: (filter?: Record<string, unknown>) =>
+    filter ? (["assessments", filter] as const) : (["assessments"] as const),
+  assessment: (id: string) => ["assessments", "detail", id] as const,
+  assessmentDocuments: (id: string) =>
+    ["assessments", id, "documents"] as const,
+  assessmentAnswers: (id: string) => ["assessments", id, "answers"] as const,
+  assessmentScans: (id: string) => ["assessments", id, "scans"] as const,
+  assessmentReport: (id: string) => ["assessments", id, "report"] as const,
+  assessmentAudit: (id: string) => ["assessments", id, "audit"] as const,
+  assessmentQuestionnaireCatalog: ["assessments", "questionnaire-catalog"] as const,
 } as const;

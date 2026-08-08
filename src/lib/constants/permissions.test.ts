@@ -83,11 +83,17 @@ const BACKEND_CATALOG = [
   "ai:draft",
   "audit:read",
   "audit:export",
+  // assessment / CLI spine
+  "assessment:create",
+  "assessment:read",
+  "assessment:update",
+  "assessment:evaluate",
+  "assessment:cli_token",
 ];
 
 describe("permission catalog mirror (§9.14)", () => {
-  it("contains exactly the 60 backend permission strings", () => {
-    expect(BACKEND_CATALOG).toHaveLength(60);
+  it("contains exactly the 65 backend permission strings", () => {
+    expect(BACKEND_CATALOG).toHaveLength(65);
     expect([...ALL_PERMISSIONS].sort()).toEqual([...BACKEND_CATALOG].sort());
   });
 
