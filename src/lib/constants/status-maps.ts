@@ -69,6 +69,17 @@ export const STATUS_TONES: Record<string, Tone> = {
   DRAFT: "neutral",
   PUBLISHED: "pass",
 
+  // Validation triggers / task sources
+  MANUAL: "info",
+  SCHEDULED: "neutral",
+  AUTO: "info",
+
+  // Validation rule categories
+  NOTICE: "info",
+  CONSENT: "info",
+  RETENTION: "warn",
+  RIGHTS: "info",
+
   // Reports / notifications / AI
   GENERATING: "info",
   SENT: "info",

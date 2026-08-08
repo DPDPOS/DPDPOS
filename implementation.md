@@ -442,10 +442,21 @@ All three share `useAsyncResource(key, terminalStates)` — one hook that polls,
 
 ### 7.8 Dev proxy (Next rewrites)
 
+The backend versions its entire API under `/api/v1` (register-routes.ts); the client is deliberately version-agnostic (`BASE_URL = /api`), so the version prefix is pinned at the proxy. `/healthz` and `/readyz` live at the backend **root**, not under `/api/v1` — they get their own exact-route rule **before** the catch-all:
+
 ```ts
 // next.config.ts
-rewrites: async () => [{ source: "/api/:path*", destination: `${process.env.BACKEND_URL}/api/:path*` }]
+async rewrites() {
+  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:3000";
+  return [
+    { source: "/api/healthz", destination: `${backendUrl}/healthz` },
+    { source: "/api/readyz", destination: `${backendUrl}/readyz` },
+    { source: "/api/:path*", destination: `${backendUrl}/api/v1/:path*` },
+  ];
+}
 ```
+
+> **Do not** "simplify" the catch-all back to `${backendUrl}/api/:path*` — that is the exact regression that caused every API call (login included) to 404 against the real backend (verified this session).
 
 No CORS work needed in dev; in production the frontend is served behind the same origin or a configured `NEXT_PUBLIC_API_BASE_URL`.
 
@@ -535,37 +546,99 @@ Each entry: **Purpose · Layout · Data & keys · Interactions · Permissions ·
 
 ### 9.6 Rights requests (`/rights`)
 
-- **Purpose**: the SLA-tracked data principal queue.
-- **Table** (`GET /data-subject-requests` filters requestType/status/assignedTo): requesterReference (mono), type chip, status chip, assignee, openedAt, **SLA countdown** (due = opened + 7 days, computed client-side; backend provides no due field on create — see note), version badge.
-- **Submit drawer** (`POST /data-subject-requests`): requestType select (7 types), requesterReference*, assignee (optional).
-- **Detail page**: timeline of status changes; **assign** (`PATCH` with version + assignedTo), **advance status** stepper honoring the rights state machine (`SUBMITTED → ASSIGNED → IN_PROGRESS → RESPONDED/REJECTED → CLOSED`), resolution summary textarea on close/reject (with version).
-- **Special states**: 409 conflict modal (§7.6); SLA urgency tones (§8.2).
-- **SLA note**: the backend defines SLA per request type in `RIGHTS_REQUEST_SLA_DAYS` — 30 days for ACCESS/CORRECTION/COMPLETION/UPDATING/ERASURE/NOMINATION, **45 days for GRIEVANCE_REDRESSAL**, default 30. Mirror this constant client-side; countdown = `openedAt` + SLA days. (`dueAt` is nullable on the model and the create DTO doesn't accept it — show "—" when it's null.)
+- **Purpose**: the SLA-tracked data principal queue. Every request is a legal clock — the SLA must be the first thing the eye lands on. This is the DPDP Data Principal rights surface (Act §11–14, §8 rights + §9 grievance redressal).
+- **Contracts** (mirror `data-subject-request.routes.ts`):
+
+  | Method | Path | Body / query | Notes |
+  |---|---|---|---|
+  | POST | `/data-subject-requests` | `{ requestType*(7), requesterReference*(≤500), assignedTo? }` | `rights_request:create`; returns full record incl. `version`, `openedAt`, `dueAt?` |
+  | GET | `/data-subject-requests` | `?requestType&status&assignedTo` | `rights_request:read`; flat (unpaginated) list |
+  | GET | `/data-subject-requests/:id` | — | `rights_request:read` |
+  | PATCH | `/data-subject-requests/:id` | `{ version*(lock), assignedTo?, status?, resolutionSummary?(≤4000) }` — ≥1 field | `rights_request:update`; returns updated record |
+
+- **Record shape**: `id, requestType, requesterReference, status, assignedTo?, openedAt, dueAt?, closedAt?, resolutionSummary?, version`. Every mutation carries `version`; a stale one → 409 conflict modal (§7.6).
+- **State machine** (mirror `rights-request-lifecycle.state-machine.ts` verbatim — do not hand-roll):
+
+  | From | Actions (label → to) |
+  |---|---|
+  | SUBMITTED | assign → ASSIGNED · start → IN_PROGRESS · reject → REJECTED |
+  | ASSIGNED | start → IN_PROGRESS · reject → REJECTED |
+  | IN_PROGRESS | respond → RESPONDED · reject → REJECTED |
+  | RESPONDED | close → CLOSED |
+  | REJECTED / CLOSED | terminal — no actions |
+
+  Invariant: **CLOSED is only reachable from RESPONDED** (no closure without a logged resolution); reject and close both require `resolutionSummary` (the service 400s on empty summary → render as an inline field error).
+- **SLA**: mirror `RIGHTS_REQUEST_SLA_DAYS` client-side — 30 days for ACCESS/CORRECTION/COMPLETION/UPDATING/ERASURE/NOMINATION, **45 for GRIEVANCE_REDRESSAL**. Countdown = `openedAt` + SLA days (the create DTO never accepts `dueAt`; if the model's `dueAt` is null, compute the target ourselves). Tone escalation: warn at 75% elapsed, fail when overdue; remaining-days text in `tabular` typeface. **Fix the stale "7 days" note in the original brief — the real SLA is 30/45 days.**
+- **Feature folder**: `src/features/rights/{types,api,hooks,schemas}.ts`; `src/components/rights/{rights-view,submit-request-drawer,request-detail-drawer,request-state-stepper,sla-timer}.tsx`.
+- **Screens**:
+  - **Table**: requesterReference (mono), type chip, status chip, assignee (resolved from `useUsers`), openedAt, **SLA countdown** column, version badge. Filter chips for type + status, assignee combobox. Row click → detail drawer.
+  - **Submit drawer**: requestType select (each option shows a one-line plain-language description), requesterReference* (mono input), assignee optional (user combobox; hide when caller lacks `user:read`). Success invalidates `["rights-requests"]`, `["analytics","rights-requests"]`, `["dashboard"]`.
+  - **Detail drawer**: identity bar; SLA timer; lifecycle stepper driven by the **current status** (the backend does not emit per-transition audit events — `logEvent` derives `entityType` from the event name regex, which matches only `…Created/…Updated/…Deleted/…Action` suffixes, and rights emits only `RightsRequestSubmitted`/`RightsRequestClosed` — so `GET /audit/entity/data-subject-request/:id` returns `[]`; the stepper is the truthful trace, not a fake one); actions generated from the exact current status (assign combobox / start / respond / reject / close), summary textarea on reject & close.
+- **Forms** (`schemas.ts`): `updateRightsRequestSchema` mirroring the DTO (version int ≥1, `assignedTo` nullable-uuid, `status` enum, `resolutionSummary` ≤4000 nullable) with the same "at least one field" refine.
+- **Tests**: stepper availability per exact status (gate on `status === "…"`, never `canTransition` — §10.4 lesson), SLA math incl. GRIEVANCE_REDRESSAL 45 days + 75%/overdue tones, terminal rows show no actions, 409 conflict modal, empty-summary inline error on reject/close.
 
 ### 9.7 Validations (`/validations`)
 
-- **Two tabs**: **Runs** and **Rules**.
-- **Runs**: list (`GET /validation-runs?status`) with trigger type (MANUAL/SCHEDULED), status chip, started/finished, duration; **"Run validation"** button (`POST /validation-runs` `{ triggerType: "MANUAL" }`) → poll via `useAsyncResource`; run detail (`GET /validation-runs/:id`) shows results list — ruleCode (mono), title, status chip (PASS/FAIL/SKIPPED/ERROR), score, explanation, `evidenceRequiredFlag`, linked control, **"Create violation"** action from a FAIL result (`POST /violations` with `validationResultId`).
-- **Rules**: library table (`GET /validation-rules?category&activeOnly`) — ruleCode, title, category chip (NOTICE/CONSENT/RETENTION/RIGHTS), severity, `activeFlag` toggle (PATCH — **validation rules are version-locked**: send the current `version` with the toggle); create/edit drawer with `legalBasisRef`.
-- **Special states**: running run → indeterminate progress + stage chips; FAIL results render the full explanation block (§1.2 of the implementation plan: what failed, why, evidence missing, fix, owner, due).
-- **One violation per FAIL result**: `@@unique([organizationId, validationResultId])` — once a violation exists for a result, replace "Create violation" with a link to the existing violation; handle a raced 409 with the conflict modal.
+- **Purpose**: deterministic compliance checking — the root of the enforcement chain (§10.3). Two halves: the **library** (rules, version-locked) and the **engine** (runs → results). A FAIL result is the door to violations.
+- **Contracts**:
+
+  | Method | Path | Body / query | Permission |
+  |---|---|---|---|
+  | POST | `/validation-runs` | `{ triggerType?: "MANUAL" }` | `validation:run` |
+  | GET | `/validation-runs` | `?status(PENDING|RUNNING|COMPLETED|PARTIAL|FAILED)` | `validation:read` |
+  | GET | `/validation-runs/:id` | — (includes `results[]`) | `validation:read` |
+  | POST | `/validation-rules` | `{ ruleCode*, title*, description?, legalBasisRef?, severity?(LOW|MEDIUM|HIGH|CRITICAL), category?(NOTICE|CONSENT|RETENTION|RIGHTS) }` | `validation:run` |
+  | GET | `/validation-rules` | `?category&activeOnly` | `validation:read` |
+  | GET | `/validation-rules/:id` | — | `validation:read` |
+  | PATCH | `/validation-rules/:id` | `{ version*, title?/description?/legalBasisRef?/severity?/activeFlag? }` | `validation:run` |
+
+- **Records**: run = `id, triggerType(MANUAL|SCHEDULED), triggeredBy?, status, startedAt, finishedAt?, durationMs?, results[]`; result = `id, runId, ruleId, ruleCode, resultStatus(PASS|FAIL|SKIPPED|ERROR), explanation?, score?, evidenceRequiredFlag, controlId?`.
+- **Runs tab**: list with trigger-type + status chips, started/finished, duration (`durationMs` → "1m 42s"); **Run validation** button (gated `validation:run`) POSTs then polls via `useAsyncResource` (§7.7) — PENDING/RUNNING poll, terminal stops. Run detail: results table — ruleCode (mono), resultStatus chip, score, evidence glyph, linked control code; **FAIL rows expand** the full explanation block (what failed, why, evidence missing, fix, owner, due) plus **"Create violation"** → `POST /violations { validationResultId, severity: rule.severity, title: rule.title }`. `@@unique([organizationId, validationResultId])` = one violation per result: after success replace the action with a link to the existing violation; a raced 409 opens the conflict modal and refetches the run.
+- **Rules tab**: library table — ruleCode (mono), title, category chip, severity chip, `activeFlag` toggle, version badge. Filters: category chips + "active only" toggle. **The active toggle and edits are version-locked**: always send the current `version`; on 409 roll back the optimistic toggle, refetch, and re-apply the intent (never silently flip back). Create/edit drawer mirrors `createValidationRuleDtoSchema`/`updateValidationRuleDtoSchema` (legalBasisRef mono, severity segmented, category select).
+- **Feature folder**: `src/features/validations/{types,api,hooks,schemas}.ts`; `src/components/validations/{validations-view,runs-list,run-detail,results-table,rules-library,rule-form-drawer}.tsx`.
+- **Invalidation**: run-trigger → `["validations","runs"]`; rule toggle → `["validations","rules"]` + dashboard score; create-violation → `["violations"]` + `["analytics","violations"]`.
+- **Tests**: polling lifecycle (PENDING→COMPLETED stops the interval; FAILED stops + error state), toggle sends `version` and rolls back on 409, category/activeOnly filters, FAIL → "Create violation" → raced-409 handling, empty-runs state.
 
 ### 9.8 Violations (`/violations`)
 
-- **Purpose**: the enforcement board.
-- **Board**: kanban-lite columns by status (`OPEN · TRIAGE · ASSIGNED · IN_PROGRESS · PENDING_EVIDENCE · VALIDATED · CLOSED/ARCHIVED` collapsed) OR dense table with status filter chips + severity filter — default table, board as toggle. Data: `GET /violations?status&severity&assignedTo`.
-- **Row/detail**: title, severity chip (LOW→CRITICAL = neutral/warn/warn/fail), status, assignee, due, version, source link (`validationResultId`), resolution summary when present.
-- **Actions** (each gated by `canTransition` mirror + permission): triage, assign (combobox), start, request evidence, validate, close (modal with resolutionSummary + version), archive. Assignments/status via `PATCH /violations/:id` with version; close via `POST /violations/:id/close`.
-- **Linked remediation tasks** on detail: list (`GET /remediation-tasks?violationId=`) with their own state stepper; create task drawer.
-- **Special states**: 409 recovery; `evidenceRequiredFlag` renders "evidence required" chip linking to evidence filtered by `violationId`; terminal rows muted.
+- **Purpose**: the enforcement board. Everything non-terminal is someone's job — ownership, severity and the clock must be legible, and the UI must never offer an illegal transition.
+- **Contracts**:
+
+  | Method | Path | Body / query | Permission |
+  |---|---|---|---|
+  | POST | `/violations` | `{ validationResultId?, severity*(LOW|MEDIUM|HIGH|CRITICAL), title*(≤255), description?, assignedTo?, dueAt? }` | `violation:create` |
+  | GET | `/violations` | `?status&severity&assignedTo` | `violation:read` |
+  | GET | `/violations/:id` | — | `violation:read` |
+  | PATCH | `/violations/:id` | `{ version*, status?/severity?/assignedTo?/dueAt?/resolutionSummary? }` | `violation:assign` |
+  | POST | `/violations/:id/close` | `{ version*, resolutionSummary* }` | `violation:close` |
+
+- **State machine** (copy `violation-lifecycle.state-machine.ts` verbatim — canonical chain per Appendix A): `OPEN → TRIAGE → ASSIGNED → IN_PROGRESS → PENDING_EVIDENCE → VALIDATED → CLOSED`; `ARCHIVED` from any non-terminal; **CLOSED only from VALIDATED**; terminal = CLOSED/ARCHIVED. Action labels (triage / assign / start / request-evidence / validate / close / archive) come from the transition map's action names.
+- **Record**: `id, title, description?, severity, status, assignedTo?, validationResultId?, openedAt, dueAt?, closedAt?, resolutionSummary?, version`.
+- **Screens**: default **dense table** (severity chip, status chip, title, assignee, due, version, source) with status + severity filter chips and an assignee combobox; optional **board toggle** — kanban-lite columns by status (terminal columns collapsed); persistence via URL param `?view=board|table`. Row → detail drawer: identity bar, source link when `validationResultId`, **evidence chip** when `evidenceRequiredFlag` → `/evidence?violationId=`, linked remediation tasks (`GET /remediation-tasks?violationId=`) each with its own mini-stepper, resolution summary block when present.
+- **Actions** (each gated by the **exact** current status **and** `<Can perm>`): **every status/assignment/due mutation (triage, start, request-evidence, validate, assign, due) is a `PATCH /violations/:id` gated by `violation:assign`**, always with `version`; close is `POST /violations/:id/close` gated by `violation:close` with `resolutionSummary*` required; archive is a PATCH with a confirm modal. No action menu on terminal rows — muted.
+- **Feature folder**: `src/features/violations/{types,api,hooks,schemas}.ts`; `src/components/violations/{violations-view,board,detail-drawer,violation-actions,severity-select,close-violation-dialog}.tsx`.
+- **Invalidation**: any status change → `["violations"]`, `["analytics","violations"]`, `["dashboard"]`, linked `["validations","runs",runId]` and `["remediation-tasks"]`.
+- **Tests**: every action only renders from its exact source state (terminal rows empty), close modal requires summary, 409 recovery, severity tones, board/table toggle.
 
 ### 9.9 Remediation (`/remediation`)
 
-- **Purpose**: the fix-it queue.
-- **Table** (`GET /remediation-tasks` filters status/violationId/assignedTo): taskTitle, violation code (mono), source chip (AUTO/MANUAL), status chip, assignee, due, version.
-- **Actions**: start, submit (→ PENDING_VERIFICATION with `verificationNotes`), verify (→ VERIFIED), rework, cancel, close (modal with `resolutionSummary` + version). All via `PATCH /remediation-tasks/:id` + `POST /remediation-tasks/:id/close`, always with version.
-- **Auto-task indicator**: tasks with source AUTO show "Auto-created from validation failure" tooltip.
-- **Special states**: 409 recovery; overdue SLA tones.
+- **Purpose**: the fix-it queue with verification — nothing closes without proof. AUTO tasks (created by the `ViolationCreated` event) and MANUAL tasks run through the same stepper.
+- **Contracts**:
+
+  | Method | Path | Body / query | Permission |
+  |---|---|---|---|
+  | POST | `/remediation-tasks` | `{ violationId*, taskTitle*(≤255), taskDescription?, assignedTo?, dueAt? }` | `remediation:update` |
+  | GET | `/remediation-tasks` | `?status&violationId&assignedTo` | `remediation:read` |
+  | GET | `/remediation-tasks/:id` | — | `remediation:read` |
+  | PATCH | `/remediation-tasks/:id` | `{ version*, status?/taskTitle?/taskDescription?/assignedTo?/dueAt? }` | `remediation:update` |
+  | POST | `/remediation-tasks/:id/close` | `{ version*, resolutionSummary* }` | `remediation:update` |
+
+- **State machine** (copy `remediation-task-lifecycle.state-machine.ts` verbatim): `PENDING → IN_PROGRESS → PENDING_VERIFICATION → VERIFIED → CLOSED`; `CANCELLED` from any non-terminal; **CLOSED only from VERIFIED**; terminal = CLOSED/CANCELLED. Actions: start, submit (→ PENDING_VERIFICATION), verify (→ VERIFIED), rework (PENDING_VERIFICATION → IN_PROGRESS), cancel, close.
+- **Record**: `id, violationId, source(AUTO|MANUAL), taskTitle, taskDescription?, status, assignedTo?, dueAt?, resolutionSummary?, version`.
+- **Screens**: table — taskTitle, violation link, source chip (**AUTO** → "Auto-created from validation failure" tooltip), status chip, assignee, due (overdue tone), version. Detail drawer: 5-state stepper + cancel, audit trail via `GET /audit/entity/remediation-task/:id`, verify dialog, close dialog (`resolutionSummary*`), cancel confirm. Overdue tones reuse the rights SLA timer pattern.
+- **Feature folder**: `src/features/remediation/{types,api,hooks,schemas}.ts`; `src/components/remediation/{remediation-view,task-detail-drawer,task-stepper,verify-dialog,close-dialog}.tsx`.
+- **Invalidation**: `["remediation-tasks"]`, linked `["violations","detail",violationId]`, `["analytics","violations"]`, `["dashboard"]`.
+- **Tests**: stepper legality per exact status, AUTO vs MANUAL source rendering, verify→close only from VERIFIED, cancel confirm, 409 recovery.
 
 ### 9.10 Evidence (`/evidence`)
 
@@ -586,28 +659,100 @@ Each entry: **Purpose · Layout · Data & keys · Interactions · Permissions ·
 
 ### 9.12 Audit (`/audit`)
 
-- **Purpose**: the immutable trace, auditor-facing.
-- **Search interface** (`GET /audit` filters entityType, actionType, actorUserId, dateFrom/dateTo, cursor, limit): dense log rows — timestamp (tabular), actor (user link), actionType chip, entityType:entityId (mono), correlationId (mono, copy button).
-- **Entity history view** (`GET /audit/entity/:entityType/:entityId`): a **Timeline** of every change with `beforeJson/afterJson` diffed via `DiffView` — the "traceability" payoff screen.
-- **Export** (`POST /audit/export`): date range + format (csv/pdf) → async → poll → download.
-- **Permissions**: `audit:read` / `audit:export`. This page is read-mostly by AUDITOR/DPO.
+- **Purpose**: the immutable trace, auditor-facing, read-mostly. Two interactions dominate: *search* (scan the stream) and *entity timeline* (reconstruct one record's history).
+- **Contracts**:
 
-### 9.13 Notifications (`/notifications`) + AI (`/ai`)
+  | Method | Path | Body / query | Permission |
+  |---|---|---|---|
+  | GET | `/audit` | `?entityType&actionType&actorUserId&dateFrom&dateTo&cursor&limit(≤100, default 50)` | `audit:read` |
+  | GET | `/audit/entity/:entityType/:entityId` | — (chronological history) | `audit:read` |
+  | POST | `/audit/export` | `{ dateFrom?, dateTo?, format(csv|pdf, default csv) }` | `audit:export` |
 
-- **Notifications center**: list w/ filters (status, type), mark-read row actions, preferences panel (`GET/PUT /notifications/preferences` — email/inApp/slack toggles). Bell drawer reuse of the same hooks.
-- **AI surfaces** (per `ai.routes.ts`):
-  - **Explain** — on a FAIL validation result or violation detail: "Explain this failure" panel → `POST /ai/explain { entityType, entityId }` → poll `GET /ai/requests/:id` → rendered markdown explanation with a "AI-assisted, not a compliance decision" disclaimer.
-  - **Summarize** — evidence/violation/validation-run detail: `POST /ai/summarize`.
-  - **Draft** — notice composer ("Draft from outline") and remediation plan composer: `POST /ai/draft { draftType, context }` → insert into the editor as a starting draft the user must review.
-  - **Usage** — `GET /ai/usage` behind an "AI usage" panel in Settings.
-- **Special states**: AI request FAILED → explanation panel shows error + retry; all AI output is read-only preview with "copy" and "insert into editor" (never auto-saves).
+- **Log record**: `id, actorUserId, actionType, entityType, entityId, beforeJson?, afterJson?, ipAddress?, userAgent?, correlationId?, createdAt`.
+- **Search screen**: filter bar — entityType (text input + datalist of known types), actionType, actor (user combobox), dateFrom/dateTo (datetime inputs), then **"Load more"**: the list is **cursor-paginated, not page-paginated** (`cursor` + `limit`), so implement a cursor loader (append rows, disable while loading, end-of-list marker) — *not* the standard pager. Dense log rows: timestamp (tabular), actor (link to users), actionType chip, `entityType:entityId` (mono, clickable → entity history), correlationId (mono + copy button).
+- **Entity timeline**: `GET /audit/entity/:entityType/:entityId` rendered as a vertical timeline; each entry diffs `beforeJson` → `afterJson` with a new shared **`JsonDiff`** primitive (`src/components/ui/data/json-diff.tsx`): scalar changes as a field/before/after table, nested payloads expandable, create-only entries (beforeJson null) get a "created" badge. This screen is the traceability payoff — it powers the violation (§9.8) and remediation (§9.9) detail drawers. **Rights (§9.6) is the known exception**: its events (`RightsRequestSubmitted`/`RightsRequestClosed`) don't match the `entityType` derivation regex, so those rows carry `entityType: null` and the timeline renders empty there — rights uses the status stepper instead (verified live: the endpoint returns `[]` for rights requests).
+- **Export**: dialog with date range + format select → `POST /audit/export` → `{ jobId, status: "PENDING" }` (async). **Confirm during implementation whether the export worker writes a `Report` row** — if so, poll `GET /reports` like §9.11; otherwise reuse the evidence pattern (§9.10: honest jobId UX + a backend follow-up for a job-status endpoint).
+- **Feature folder**: `src/features/audit/{types,api,hooks}.ts`; `src/components/audit/{audit-view,filter-bar,log-table,cursor-pagination,entity-timeline,json-diff,export-dialog}.tsx`.
+- **Tests**: cursor pagination (append + end marker + no duplicate keys across pages), filters translate to query params, timeline renders before/after diffs, export dialog validates format, `audit:export` gating hides the export button without the permission.
 
-### 9.14 People & access (`/users`, `/roles`, `/departments`) + Settings
+### 9.13 Notifications (`/notifications`) + AI assistant (`/ai`)
 
-- **Users**: table (`GET /users`, paginated) — name, email, status chip (ACTIVE/INVITED/DISABLED), roles chips, lastLoginAt; **invite drawer** (`POST /users` email/name/roleIds) → success state explains the email invite + how to resend (resend = re-invite); update drawer (name, status incl. disable with confirm).
-- **Roles**: table (`GET /roles`) — name, isSystemRole badge (locked, can't edit permissions), permission count; **permission editor** (create: `POST /roles`; update: `PATCH /roles/:id/permissions`) — permission groups render as the backend catalog grouped by module (organization, users, roles, departments, framework, inventory, consent, rights, validations, violations, remediation, evidence, reports, analytics, notifications, ai, audit), each group a checkbox list; a "select all" per group; system roles show read-only.
-- **Departments**: list + create (`POST /departments` name/headUserId).
-- **Settings**: org profile form (`GET/PATCH /organizations/:id` incl. SDF toggle explainer), AI usage panel, notification preferences, session info (MFA status + enroll link).
+#### Notifications center
+
+- **Contracts**:
+
+  | Method | Path | Body / query | Permission |
+  |---|---|---|---|
+  | GET | `/notifications` | `?status(PENDING|SENT|FAILED|READ)&notificationType&page&pageSize` | `notification:read` |
+  | GET | `/notifications/unread-count` | — → `{ count }` | `notification:read` |
+  | PATCH | `/notifications/:id/read` | — | `notification:read` |
+  | PATCH | `/notifications/read-all` | — | `notification:read` |
+  | GET | `/notifications/preferences` | — | `notification:read` |
+  | PUT | `/notifications/preferences` | `{ email?, inApp?, slack? }` | `notification:update_preferences` |
+
+- **Record**: `id, notificationType, channel(EMAIL|IN_APP|SLACK|TEAMS|WEBHOOK), subject, body, status(PENDING|SENT|FAILED|READ), sentAt?, readAt?, relatedEntityType?, relatedEntityId?, createdAt`. `notificationType` is a free-form string rendered server-side from templates — the UI chips from the observed set and falls back to `humanizeStatus`.
+- **Screens**: center page — paginated list, status filter chips, mark-read row action, mark-all-read header action, deep links to the related record when `relatedEntityType/Id` are present, FAILED rows rendered muted with retry context; **bell drawer** in the topbar reuses the same hooks (extend the existing `features/notifications`: currently `unreadCount` + `markAllRead` — add list + `markRead` + preferences); **preferences panel** — email/inApp/slack toggle rows → `PUT /notifications/preferences`, optimistic update with rollback on failure.
+- **Invalidation**: any read mutation invalidates the whole `["notifications"]` prefix (unread-count is a child key) so the bell badge and the center stay in sync.
+- **Tests**: badge count updates after mark-read, filters, preferences optimistic toggle + rollback, FAILED row rendering.
+
+#### AI assistant
+
+- **Contracts** (async request/response — POST enqueues a BullMQ job, the UI polls):
+
+  | Method | Path | Body | Permission |
+  |---|---|---|---|
+  | POST | `/ai/explain` | `{ entityType(validation_result|violation), entityId }` → `{ requestId, status: "PENDING" }` | `ai:explain` |
+  | POST | `/ai/summarize` | `{ entityType(evidence|violation|validation_run), entityId }` | `ai:explain` |
+  | POST | `/ai/draft` | `{ draftType(notice|remediation_plan), context? }` | `ai:draft` |
+  | GET | `/ai/requests/:id` | poll → `{ id, useCase, entityType, entityId, status(PENDING|PROCESSING|COMPLETED|FAILED), resultText?, tokensIn?, tokensOut?, latencyMs?, errorMessage? }` | `ai:explain` |
+  | GET | `/ai/usage` | — usage/credits summary | `ai:explain` |
+
+- **Async pattern**: all POSTs share one `useAiRequest` hook — POST → poll `GET /ai/requests/:id` via `useAsyncResource` (§7.7) with terminal states COMPLETED/FAILED (PENDING/PROCESSING keep polling); FAILED surfaces `errorMessage` with retry. One state machine, defined once, reused by every surface.
+- **Provider wiring (backend only — no frontend code)**: the backend calls `POST {AI_BASE_URL}/chat/completions` with `Authorization: Bearer AI_API_KEY`, `model: AI_MODEL`, `max_tokens: AI_MAX_TOKENS` (`OpenAICompatibleAdapter`). Both providers below are drop-in — only `dpdpos_backend/.env` changes:
+
+  | Provider | `AI_BASE_URL` | `AI_MODEL` | Free tier (approx — verify at signup) | Notes |
+  |---|---|---|---|---|
+  | **Groq** | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` (or `llama-3.1-8b-instant` for faster drafts) | ~30 req/min, per-token/day caps | Lowest latency, native OpenAI shape — best for the interactive explain panel |
+  | **Google Gemini** (AI Studio key, no card) | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` (or `gemini-2.0-flash`) | ~10 RPM / 250+ RPD on Flash tiers | Generous daily quota, strong instruction-following |
+
+  **Recommendation**: default to **Gemini Flash** for the demo (largest free daily budget — a demo script won't hit caps); switch to **Groq** when latency matters. If the `AI_*` envs are missing the adapter throws 503 — the UI must render an honest "AI provider not configured — see Settings" degraded state (§7.4), never a raw error.
+- **Surfaces**:
+  - **Explain** — on a FAIL validation result (§9.7) and violation detail: "Explain this failure" panel → POST → poll → rendered markdown (typography-constrained `Markdown` primitive) + **"AI-assisted, not a compliance decision"** disclaimer + copy + "insert into notes".
+  - **Summarize** — evidence / violation / validation-run detail: compact summary card (same hook).
+  - **Draft** — notice composer and remediation-plan composer: "Draft from outline" → POST draft with `context` from the current form state → poll → preview pane with **Insert into editor** (writes into the RHF field and focuses it) — **never auto-saves**.
+  - **Usage** — Settings panel from `GET /ai/usage` (requests by use case, tokens, latency).
+- **Feature folder**: `src/features/ai/{types,api,hooks}.ts`; `src/components/ai/{explain-panel,summarize-card,draft-composer,markdown}.tsx`; plus the extended `src/features/notifications/` and `src/components/notifications/{notifications-view,bell-drawer,preferences-panel}.tsx`.
+- **Tests**: polling stops at COMPLETED and at FAILED (with retry), insert-into-editor writes the draft into the form, disclaimer always rendered, provider-not-configured 503 state, usage panel rendering.
+
+### 9.14 People & access (`/users`, `/roles`, `/departments`) + Settings (`/settings`)
+
+#### Users
+
+- **Contracts**: `GET /users?page&pageSize` (`user:read`); `POST /users { email*, name*, roleIds? }` (`user:create` — invite); `PATCH /users/:id { name?, status?(ACTIVE|INVITED|DISABLED) }` (`user:update`).
+- **Record**: `id, email, name, status, mfaEnabled, lastLoginAt?, roles[](names), createdAt`.
+- **Screen**: paginated table — name, email (mono), status chip, role chips, lastLoginAt, mfaEnabled glyph. **Invite drawer**: email*, name*, role multi-select (from `GET /roles`, needs `role:read`) → success state explains the emailed invite + resend (re-invite via POST). **Edit drawer**: name; status control with a **disable confirm modal** ("they will not be able to sign in") — warn when the target is the current user.
+- **Feature folder**: extend the existing `features/users/{types,api,hooks}.ts` (list already exists for comboboxes; add invite/update).
+
+#### Roles
+
+- **Contracts**: `GET /roles?page&pageSize` (`role:read`); `POST /roles { name*, description?, permissions[] }` (`role:create`); `PATCH /roles/:id/permissions { permissions[] }` (`role:update_permissions`).
+- **Record**: `id, name, description?, permissions[], isSystemRole, createdAt`.
+- **Screen**: table — name, system badge (**isSystemRole = locked**: no editor, "Seeded system role" tooltip), permission count, member count (derive from the users list client-side; add a backend follow-up for authoritative counts). **Create modal**: name, description, then the permission editor. **Permission editor**: the frozen catalog (60 strings) mirrored client-side as `src/lib/constants/permissions.ts`, grouped exactly like `PERMISSIONS` in `shared/constants/permissions.ts` — organizations · users · roles · departments · framework/controls/requirements · inventory · consent · rights · validations/violations/remediation · evidence/reports/analytics · notifications/ai/audit; each group is a checkbox list with "select all", plus a live permission count and a search box; save = `POST /roles` or `PATCH /roles/:id/permissions`. System roles render the same tree read-only.
+- **Tests**: a unit test asserting the client mirror contains exactly the 60 backend strings, select-all per group, system-role locked, search filtering.
+
+#### Departments
+
+- **Contracts**: `GET /departments?page&pageSize` (`department:read`); `POST /departments { name*, headUserId? }` (`department:create`).
+- **Screen**: table — name, head (resolved from users), member count (derive client-side from `UserResponse` when present, else "—"). Create modal: name* + head combobox.
+
+#### Settings (`/settings`)
+
+- **Purpose**: a calm, sectioned profile surface — no dashboard widgets. Stacked sections or tabs:
+  1. **Organization profile** — `GET/PATCH /organizations/:id` (`organization:read/update`): name*, industry, companySize, operatingRegion, companyType, maturityLevel, **SDF toggle with plain-language explainer** ("significantly large data fiduciary — changes what the framework requires"); optimistic save (no `version` on the org DTO — a slow save just shows a spinner).
+  2. **AI usage** — `GET /ai/usage` (`ai:explain`): requests by use case, tokens, latency; the "provider not configured" hint lives here.
+  3. **Notification preferences** — the §9.13 panel (`GET/PUT /notifications/preferences`).
+  4. **Session & security** — from `/auth/me`: MFA status + "Set up MFA" launch (existing enrollment flow, §6.5), email/roles/permissions summary.
+- **Feature folder**: `features/settings/{types,api,hooks}.ts`; `components/settings/{settings-view,org-profile-form,ai-usage-panel,security-section}.tsx`.
 
 ---
 
@@ -637,7 +782,16 @@ UploadPanel states: idle → hashing (progress) → uploading (progress) → con
 
 ### 10.4 State machines mirrored in UI
 
-Client-side `canTransition(from, to)` maps are copied from the backend domain classes (`violation-lifecycle.state-machine.ts`, `remediation-task-lifecycle.state-machine.ts`, `rights-request-lifecycle.state-machine.ts`). Action menus are generated from the current status: available transitions become enabled items; the UI never offers `CLOSED → *`. Evidence transitions are enforced server-side via `assertTransition` (sequential: UPLOADED → TAGGED → MAPPED → UNDER_REVIEW → APPROVED → LOCKED), so the detail page renders a progress trail. Rights stepper: `SUBMITTED → ASSIGNED → IN_PROGRESS → RESPONDED → CLOSED`, with `REJECTED` terminal from SUBMITTED/ASSIGNED/IN_PROGRESS; closure and rejection both require a resolution summary.
+Every backend lifecycle is mirrored client-side as a pure map copied from the backend domain classes — `violation-lifecycle.state-machine.ts`, `remediation-task-lifecycle.state-machine.ts`, `rights-request-lifecycle.state-machine.ts`, plus the sequential evidence chain. The maps are used to **derive action labels** and to validate transitions in unit tests — **never** to decide whether a button renders. Phase 6 taught this the hard way: `canTransition(from, to)` returns `true` when `from === to`, so gating buttons on `canTransition(status, target)` rendered "Approve" on every APPROVED file. Rule: **render an action only when `record.status === <exact source state>`**; use the map purely for tests and error messaging.
+
+| Lifecycle | Edges (action → to) | Terminal | Requires summary |
+|---|---|---|---|
+| Rights | SUBMITTED: assign→ASSIGNED, start→IN_PROGRESS, reject→REJECTED · ASSIGNED: start→IN_PROGRESS, reject→REJECTED · IN_PROGRESS: respond→RESPONDED, reject→REJECTED · RESPONDED: close→CLOSED | CLOSED, REJECTED (CLOSED only from RESPONDED) | reject, close |
+| Violation | OPEN→TRIAGE→ASSIGNED→IN_PROGRESS→PENDING_EVIDENCE→VALIDATED→CLOSED; ARCHIVED from any non-terminal (copy exact edges from the class) | CLOSED (only from VALIDATED), ARCHIVED | close |
+| Remediation | PENDING→IN_PROGRESS→PENDING_VERIFICATION→VERIFIED→CLOSED; CANCELLED from any non-terminal (copy exact edges) | CLOSED (only from VERIFIED), CANCELLED | close |
+| Evidence | UPLOADED→TAGGED→MAPPED→UNDER_REVIEW→APPROVED→LOCKED (server-enforced `assertTransition`) | LOCKED | — |
+
+Every transition PATCH sends the record's `version`; a mismatch returns 409 → the conflict modal (§7.6) offers "Reload and retry" (refetch the record, re-apply the intent). Every terminal transition collects `resolutionSummary` inline with required-until-filled validation. The UI never offers `CLOSED → *` (terminal rows are actionless and muted).
 
 ---
 
@@ -685,13 +839,21 @@ Each phase ends in something demo-able. Backend is assumed running (`docker:up`,
 
 | Phase | Scope | Demoable outcome |
 |---|---|---|
-| **0 — Scaffold** (½ wk) | create-next-app, tokens/globals, primitives (button/input/badge/chip/table skeleton), API client + envelope, queryKeys, env/rewrites, Vitest+MSW setup | Component gallery page; `/healthz` wired to a status pill |
+| **0 — Scaffold** (½ wk) | create-next-app, tokens/globals, primitives (button/input/badge/chip/table skeleton), API client + envelope, queryKeys, env/rewrites, Vitest+MSW setup | API client + envelope wired to `/healthz`; `/` points at `/login` (see §12 note on removing the Phase-0 landing page) |
 | **1 — Auth & shell** (1 wk) | login, MFA challenge + enrollment, accept invite, session store, refresh interceptor, route guards, AppShell, sidebar, topbar, notification bell, 403/404/500, toasts | Full login→dashboard journey with seeded demo org; logout; session expiry |
 | **2 — Programme** (1–1.5 wk) | onboarding, framework wizard + roadmap + publish, controls register + edit, requirements + map | Generate a real framework from profile; publish; see roadmap phases; edit a control |
 | **3 — Operations** (1–1.5 wk) | inventory (assets + processing), notices, consent records + withdraw, rights queue + SLA + close | Register an asset, link processing activity, record consent, withdraw, submit and close a rights request |
 | **4 — Enforcement** (1.5 wk) | validations (rules + runs + polling + results), violations board + lifecycle, remediation tasks + stepper, auto-task chain | Run validation, see FAIL results, create violation, drive it to CLOSED with a remediation task |
 | **5 — Proof** (1–1.5 wk) | evidence vault + presigned upload + lifecycle + export, reports + polling + download, audit search + entity timeline + export | Upload evidence to a control, approve + lock it, export an evidence pack, generate a board pack report, inspect an entity's audit trail |
 | **6 — Intelligence & polish** (1 wk) | AI explain/summarize/draft + usage, command palette, keyboard shortcuts, density toggle, empty-state pass, dashboard deltas, Playwright journeys | "Explain this failure" on a real violation; ⌘K navigation; polished demo script |
+| **7 — Rights & Validations** (1–1.5 wk) | rights queue + SLA timers + stepper + audit-driven timeline (§9.6); validation runs + polling + results; rules library + version-locked toggles; run→violation link (§9.7) | Submit and drive a rights request to CLOSED; run a validation and inspect FAIL results |
+| **8 — Enforcement chain** (1.5 wk) | violations table/board + lifecycle actions + close (§9.8); remediation tasks + stepper + auto-task (§9.9); cross-module invalidation so the dashboard score reacts | Create a violation from a FAIL result and drive it to CLOSED with a remediation task |
+| **9 — Audit & Notifications** (1 wk) | audit search + cursor pagination + entity timeline + JsonDiff + export (§9.12); notifications center + bell drawer + preferences (§9.13) | Inspect one entity's full audit timeline; mark notifications read; set preferences |
+| **10 — AI assistant** (1 wk) | AI explain/summarize/draft surfaces + polling + retry + usage (§9.13); provider wiring via env (Gemini/Groq) | "Explain this failure" on a real violation; draft a notice from an outline |
+| **11 — People & access** (1 wk) | users + invites + status; roles + grouped permission editor over the mirrored 60-string catalog; departments (§9.14) | Invite a user, create a custom role with a permission subset, assign it |
+| **12 — Settings & polish** (½–1 wk) | org profile + SDF explainer, AI usage, notification prefs, MFA session panel (§9.14); **remove the gallery page/route and redirect `/` → `/login`**; ⌘K + density polish; full Playwright pass | Everything in Settings; gallery gone; polished demo script |
+
+**Route-map note**: when each phase ships, bump `CURRENT_PHASE` in `src/lib/navigation/routes.ts` and set `shipped: true` on that phase's routes (renumbering `phase` to the new number) so the sidebar renders them live instead of disabled with a phase chip.
 
 **Acceptance criteria per phase** (aligned to PRD §14): every screen ships loading/empty/error states; every mutation is permission-gated; every list honors pagination; every detail shows a trace footer.
 
@@ -703,9 +865,10 @@ Each phase ends in something demo-able. Backend is assumed running (`docker:up`,
 |---|---|---|
 | Unit | Vitest | state machines mirrors (transition availability), queryKey builders, date/SLA utils, hash util, schema mirrors |
 | Component | Testing Library + MSW | DataTable (sort/paginate/empty), StatusChip map, forms (field errors from `details.fieldErrors`), conflict modal (409), presigned UploadPanel states, permission gating `<Can>` |
-| Integration (hooks) | Testing Library + MSW | `usePaginatedQuery`, `useAsyncResource` polling lifecycle (PENDING→COMPLETED stops polling), refresh interceptor single-flight |
+| Integration (hooks) | Testing Library + MSW | `usePaginatedQuery`, `useAsyncResource` polling lifecycle (PENDING→COMPLETED stops polling) incl. AI requests + validation runs, rights SLA countdown math, audit cursor pagination, refresh interceptor single-flight |
+| Component | Testing Library + MSW | JsonDiff (before/after), grouped permission editor, rights/violation/remediation stepper legality per exact status, `Can` gating matrix |
 | E2E | Playwright (seeded demo org) | login (incl. MFA challenge), framework generate→publish, validation run→violation→remediation→close, evidence upload→lock→export, report generate→download, audit entity timeline, 403 route direct-hit |
-| Visual/regression | Playwright `toHaveScreenshot` on the design-system gallery + key pages | enforces the §4 design contract |
+| Visual/regression | Playwright `toHaveScreenshot` on key pages | enforces the §4 design contract |
 
 **Permission matrix tests**: a data table of role→permission→(visible/disabled/hidden) driven by `SYSTEM_ROLE_PRESETS` — catches both over- and under-exposure in the UI.
 
@@ -738,7 +901,7 @@ Each phase ends in something demo-able. Backend is assumed running (`docker:up`,
 3. All five system roles render correct navigation/action availability (permission matrix test green).
 4. The four workflows in §10 are demoable end-to-end.
 5. Every page passes loading/empty/error + 403/404/500 states.
-6. Design-system gallery + Playwright screenshots enforce §4 (no gradient/emoji/pill-slop regressions).
+6. Playwright screenshots of key pages enforce §4 (no gradient/emoji/pill-slop regressions).
 7. Typecheck, lint, unit, component, and e2e suites are green in CI.
 
 ---
@@ -811,10 +974,12 @@ Base `/api/v1`. All routes except `POST /organizations` (public bootstrap) and `
 ### Rights
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/data-subject-requests` | `rights_request:create`; `{ requestType*(7), requesterReference*, assignedTo? }` |
-| GET | `/data-subject-requests?requestType&status&assignedTo` | `rights_request:read` |
+| POST | `/data-subject-requests` | `rights_request:create`; `{ requestType*(7), requesterReference*, assignedTo? }` → full record incl. `version`, `openedAt`, `dueAt?` |
+| GET | `/data-subject-requests?requestType&status&assignedTo` | `rights_request:read`; flat (unpaginated) list |
 | GET | `/data-subject-requests/:id` | `rights_request:read` |
-| PATCH | `/data-subject-requests/:id` | `rights_request:update`; **requires `version`** + `assignedTo?/status?/resolutionSummary?` |
+| PATCH | `/data-subject-requests/:id` | `rights_request:update`; **requires `version`** + `assignedTo?/status?/resolutionSummary?` (≥1 field); terminal transitions (REJECTED/CLOSED) require `resolutionSummary` |
+
+Rights lifecycle (mirror `rights-request-lifecycle.state-machine.ts`): `SUBMITTED → ASSIGNED → IN_PROGRESS → RESPONDED → CLOSED`; `REJECTED` terminal from SUBMITTED/ASSIGNED/IN_PROGRESS; **CLOSED only from RESPONDED**. SLA: `RIGHTS_REQUEST_SLA_DAYS` — 30 days (45 for `GRIEVANCE_REDRESSAL`).
 
 ### Validations
 | Method | Path | Notes |
@@ -861,7 +1026,7 @@ Base `/api/v1`. All routes except `POST /organizations` (public bootstrap) and `
 | GET | `/audit?entityType&actionType&actorUserId&dateFrom&dateTo&cursor&limit` | `audit:read`; cursor-paginated |
 | GET | `/audit/entity/:entityType/:entityId` | `audit:read`; entity history with before/after |
 | POST | `/audit/export` | `audit:export`; `{ dateFrom?, dateTo?, format(csv|pdf) }` → async |
-| GET | `/notifications?status&notificationType&page&pageSize` | `notification:read` |
+| GET | `/notifications?status(PENDING|SENT|FAILED|READ)&notificationType&page&pageSize` | `notification:read` |
 | GET | `/notifications/unread-count` | `notification:read` |
 | PATCH | `/notifications/:id/read`, `/notifications/read-all` | `notification:read` |
 | GET | `/notifications/preferences` | `notification:read` |
@@ -877,11 +1042,13 @@ Base `/api/v1`. All routes except `POST /organizations` (public bootstrap) and `
 | POST | `/reports` | `report:generate`; `{ reportType*(8), title?, format?(PDF|CSV|EXCEL, default CSV), parameters?{dateFrom,dateTo} }` → async |
 | GET | `/reports/:id`, `/reports/:id/download` | `report:read` |
 | DELETE | `/reports/:id` | `report:generate` (cancel pending) |
-| POST | `/ai/explain` | `ai:explain`; `{ entityType(validation_result|violation), entityId }` → async |
-| POST | `/ai/summarize` | `ai:explain`; `{ entityType(evidence|violation|validation_run), entityId }` → async |
-| POST | `/ai/draft` | `ai:draft`; `{ draftType(notice|remediation_plan), context? }` → async |
-| GET | `/ai/requests/:id` | `ai:explain`; poll result |
-| GET | `/ai/usage` | `ai:explain` |
+| POST | `/ai/explain` | `ai:explain`; `{ entityType(validation_result|violation), entityId }` → `{ requestId, status: "PENDING" }` |
+| POST | `/ai/summarize` | `ai:explain`; `{ entityType(evidence|violation|validation_run), entityId }` → `{ requestId, status: "PENDING" }` |
+| POST | `/ai/draft` | `ai:draft`; `{ draftType(notice|remediation_plan), context? }` → `{ requestId, status: "PENDING" }` |
+| GET | `/ai/requests/:id` | `ai:explain`; poll → `{ status(PENDING|PROCESSING|COMPLETED|FAILED), resultText?, errorMessage?, tokensIn?, tokensOut?, latencyMs? }` |
+| GET | `/ai/usage` | `ai:explain`; usage/credits summary |
+
+AI provider (backend): `OpenAICompatibleAdapter` → `POST {AI_BASE_URL}/chat/completions`, `Authorization: Bearer AI_API_KEY`, `model: AI_MODEL`, `max_tokens: AI_MAX_TOKENS`. Drop-in providers: **Groq** (`https://api.groq.com/openai/v1` + `llama-3.3-70b-versatile`) or **Gemini** (`https://generativelanguage.googleapis.com/v1beta/openai/` + `gemini-2.5-flash`). Missing `AI_*` envs → 503 "provider not configured" (UI must render the degraded state, §7.4).
 
 ### State machines (must mirror in UI — §10.4)
 - **Violation:** `OPEN → TRIAGE → ASSIGNED → IN_PROGRESS → PENDING_EVIDENCE → VALIDATED → CLOSED`; `ARCHIVED` from any non-terminal. CLOSED only from VALIDATED.

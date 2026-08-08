@@ -62,7 +62,7 @@ export function isRouteLive(route: AppRoute): boolean {
 }
 
 /** Build phase shipped so far — later-phase nav items render disabled. */
-export const CURRENT_PHASE = 6;
+export const CURRENT_PHASE = 7;
 
 export const NAV_GROUPS: NavGroup[] = [
   "Overview",
@@ -175,7 +175,8 @@ export const APP_ROUTES: AppRoute[] = [
     group: "Operations",
     icon: UserRound,
     permission: "rights_request:read",
-    phase: 4,
+    phase: 7,
+    shipped: true,
   },
 
   // Enforcement -------------------------------------------------------------
@@ -186,7 +187,8 @@ export const APP_ROUTES: AppRoute[] = [
     group: "Enforcement",
     icon: Activity,
     permission: "validation:read",
-    phase: 3,
+    phase: 7,
+    shipped: true,
   },
   {
     href: "/violations",

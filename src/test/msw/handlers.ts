@@ -2,6 +2,12 @@ import { http, HttpResponse } from "msw";
 import { DEMO_CREDENTIALS } from "@/features/auth/demo-credentials";
 import type { EvidenceFileRecord } from "@/features/evidence/types";
 import type { ReportRecord } from "@/features/reports/types";
+import type { RightsRequestResponse } from "@/features/rights/types";
+import type {
+  ValidationRuleResponse,
+  ValidationRunResponse,
+} from "@/features/validations/types";
+import type { ViolationResponse } from "@/features/violations/types";
 import {
   MFA_USER_EMAIL,
   MFA_USER_PASSWORD,
@@ -16,9 +22,14 @@ import {
   noticeRows,
   reportRows,
   requirementRows,
+  rightsRows,
   testTokens,
   testUser,
   userRows,
+  validationResultsByRun,
+  validationRuleRows,
+  validationRunRows,
+  violationRows,
 } from "./fixtures";
 
 /**
@@ -1029,4 +1040,247 @@ export const handlers = [
       { status: 409 },
     ),
   ),
+
+  // ---- Rights requests ------------------------------------------------------
+  http.get("/api/data-subject-requests", ({ request }) => {
+    const url = new URL(request.url);
+    let rows = rightsRows;
+    const status = url.searchParams.get("status");
+    if (status) rows = rows.filter((row) => row.status === status);
+    const requestType = url.searchParams.get("requestType");
+    if (requestType) rows = rows.filter((row) => row.requestType === requestType);
+    const assignedTo = url.searchParams.get("assignedTo");
+    if (assignedTo) rows = rows.filter((row) => row.assignedTo === assignedTo);
+    return HttpResponse.json({ success: true, data: rows });
+  }),
+
+  http.get("/api/data-subject-requests/:id", ({ params }) => {
+    const row = rightsRows.find((r) => r.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Request not found" },
+        },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  http.post("/api/data-subject-requests", async ({ request }) => {
+    const body = (await request.json()) as {
+      requestType: string;
+      requesterReference: string;
+      assignedTo?: string;
+    };
+    const now = Date.now();
+    const slaDays = body.requestType === "GRIEVANCE_REDRESSAL" ? 45 : 30;
+    const created: RightsRequestResponse = {
+      id: `rqst-created-${now}`,
+      requestType: body.requestType,
+      requesterReference: body.requesterReference,
+      status: "SUBMITTED",
+      assignedTo: body.assignedTo ?? null,
+      openedAt: new Date(now).toISOString(),
+      dueAt: new Date(now + slaDays * 86_400_000).toISOString(),
+      closedAt: null,
+      resolutionSummary: null,
+      version: 1,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+    };
+    rightsRows.push(created);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.patch("/api/data-subject-requests/:id", async ({ request, params }) => {
+    const row = rightsRows.find((r) => r.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Request not found" },
+        },
+        { status: 404 },
+      );
+    }
+    const body = (await request.json()) as {
+      version: number;
+      status?: string;
+      assignedTo?: string | null;
+      resolutionSummary?: string | null;
+    };
+    if (body.version !== row.version) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: "Version conflict — the record changed. Reload and retry.",
+          },
+        },
+        { status: 409 },
+      );
+    }
+    if (body.status !== undefined) row.status = body.status;
+    if (body.assignedTo !== undefined) row.assignedTo = body.assignedTo;
+    if (body.resolutionSummary !== undefined) {
+      row.resolutionSummary = body.resolutionSummary;
+    }
+    row.version += 1;
+    row.updatedAt = new Date().toISOString();
+    if (row.status === "CLOSED" || row.status === "REJECTED") {
+      row.closedAt = new Date().toISOString();
+    }
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  // ---- Validations -----------------------------------------------------------
+  http.get("/api/validation-runs", ({ request }) => {
+    const url = new URL(request.url);
+    let rows = validationRunRows;
+    const status = url.searchParams.get("status");
+    if (status) rows = rows.filter((row) => row.status === status);
+    return HttpResponse.json({ success: true, data: rows });
+  }),
+
+  http.post("/api/validation-runs", () => {
+    const now = new Date().toISOString();
+    const created: ValidationRunResponse = {
+      id: `run-created-${Date.now()}`,
+      triggerType: "MANUAL",
+      triggeredBy: "usr_demo_admin",
+      status: "PENDING",
+      startedAt: now,
+      finishedAt: null,
+      durationMs: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    validationRunRows.push(created);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.get("/api/validation-runs/:id", ({ params }) => {
+    const run = validationRunRows.find((row) => row.id === params.id);
+    if (!run) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Validation run not found" },
+        },
+        { status: 404 },
+      );
+    }
+    const results = validationResultsByRun[run.id] ?? [];
+    return HttpResponse.json({ success: true, data: { ...run, results } });
+  }),
+
+  http.get("/api/validation-rules", ({ request }) => {
+    const url = new URL(request.url);
+    let rows = validationRuleRows;
+    const category = url.searchParams.get("category");
+    if (category) rows = rows.filter((row) => row.category === category);
+    if (url.searchParams.get("activeOnly") === "true") {
+      rows = rows.filter((row) => row.activeFlag);
+    }
+    return HttpResponse.json({ success: true, data: rows });
+  }),
+
+  http.post("/api/validation-rules", async ({ request }) => {
+    const body = (await request.json()) as Partial<ValidationRuleResponse> & {
+      ruleCode: string;
+      title: string;
+    };
+    const now = new Date().toISOString();
+    const created: ValidationRuleResponse = {
+      id: `rule-created-${Date.now()}`,
+      ruleCode: body.ruleCode,
+      title: body.title,
+      description: body.description ?? null,
+      legalBasisRef: body.legalBasisRef ?? null,
+      severity: body.severity ?? "MEDIUM",
+      category: body.category ?? "NOTICE",
+      activeFlag: true,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    validationRuleRows.push(created);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.patch("/api/validation-rules/:id", async ({ request, params }) => {
+    const row = validationRuleRows.find((rule) => rule.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Validation rule not found" },
+        },
+        { status: 404 },
+      );
+    }
+    const body = (await request.json()) as {
+      version: number;
+      title?: string;
+      description?: string | null;
+      legalBasisRef?: string | null;
+      severity?: string;
+      activeFlag?: boolean;
+    };
+    if (body.version !== row.version) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: "Version conflict — the rule changed. Reload and retry.",
+          },
+        },
+        { status: 409 },
+      );
+    }
+    if (body.title !== undefined) row.title = body.title;
+    if (body.description !== undefined) row.description = body.description;
+    if (body.legalBasisRef !== undefined) row.legalBasisRef = body.legalBasisRef;
+    if (body.severity !== undefined) row.severity = body.severity;
+    if (body.activeFlag !== undefined) row.activeFlag = body.activeFlag;
+    row.version += 1;
+    row.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ success: true, data: row });
+  }),
+
+  // ---- Violations (Phase 7 chain — full module in Phase 8) -------------------
+  http.get("/api/violations", () =>
+    HttpResponse.json({ success: true, data: violationRows }),
+  ),
+
+  http.post("/api/violations", async ({ request }) => {
+    const body = (await request.json()) as {
+      validationResultId?: string;
+      severity: string;
+      title: string;
+    };
+    const now = new Date().toISOString();
+    const created: ViolationResponse = {
+      id: `vio-created-${Date.now()}`,
+      validationResultId: body.validationResultId ?? null,
+      severity: body.severity,
+      title: body.title,
+      description: null,
+      status: "OPEN",
+      assignedTo: null,
+      openedAt: now,
+      dueAt: null,
+      closedAt: null,
+      resolutionSummary: null,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    violationRows.push(created);
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
 ];
