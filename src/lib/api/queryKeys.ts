@@ -5,7 +5,15 @@
 
 export const queryKeys = {
   health: ["health"] as const,
+  /** Full dashboard overview — the single key other pages invalidate. */
   dashboard: ["dashboard"] as const,
+  analytics: ["analytics"] as const,
+  complianceScore: ["analytics", "compliance-score"] as const,
+  violationBreakdown: ["analytics", "violations"] as const,
+  evidenceCoverage: ["analytics", "evidence"] as const,
+  rightsMetrics: ["analytics", "rights-requests"] as const,
+  consentMetrics: ["analytics", "consent"] as const,
+  validationSummary: ["analytics", "validations"] as const,
   framework: (id?: string) => ["framework", id ?? "latest"] as const,
   controls: (filter?: Record<string, unknown>) =>
     ["controls", filter] as const,

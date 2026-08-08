@@ -1,0 +1,97 @@
+import { fireEvent, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSessionStore } from "@/state/session";
+import { useUiStore } from "@/state/ui";
+import { renderWithProviders } from "@/test/render";
+import { adminUser, testUser } from "@/test/msw/fixtures";
+import { Topbar } from "./topbar";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }),
+  usePathname: () => "/dashboard",
+}));
+
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href: string;
+    children: React.ReactNode;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
+const reset = () => {
+  window.localStorage.clear();
+  useUiStore.setState({ sidebarCollapsed: false, mobileNavOpen: false });
+};
+
+describe("Topbar", () => {
+  beforeEach(() => {
+    reset();
+    useSessionStore.setState({
+      status: "authenticated",
+      accessToken: "at-demo",
+      user: adminUser,
+    });
+  });
+
+  it("shows breadcrumbs for the current route", () => {
+    renderWithProviders(<Topbar />);
+    expect(screen.getByText("Overview")).toBeInTheDocument();
+    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+  });
+
+  it("polls the unread count and shows the dot", async () => {
+    renderWithProviders(<Topbar />);
+    expect(
+      await screen.findByLabelText("Notifications (3 unread)"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the notification panel with the unread count", async () => {
+    renderWithProviders(<Topbar />);
+    fireEvent.click(
+      await screen.findByLabelText("Notifications (3 unread)"),
+    );
+    expect(
+      await screen.findByText(/unread notifications?\./),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the dot without notification:read", async () => {
+    useSessionStore.setState({ user: testUser });
+    renderWithProviders(<Topbar />);
+    // testUser lacks notification:read → the bell is present but undotted.
+    expect(screen.getByLabelText("Notifications")).toBeInTheDocument();
+  });
+
+  it("opens the user menu with session identity", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Topbar />);
+    await user.click(screen.getByLabelText("Account menu"));
+
+    // The name appears in the trigger button and the panel.
+    expect(screen.getAllByText("Arjun Mehta").length).toBeGreaterThan(0);
+    expect(screen.getByText("admin@demo.dpdpos.local")).toBeInTheDocument();
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
+  });
+
+  it("opens the search palette with the / shortcut and filters pages", async () => {
+    renderWithProviders(<Topbar />);
+    fireEvent.keyDown(window, { key: "/" });
+
+    const input = screen.getByLabelText("Search pages");
+    expect(input).toBeInTheDocument();
+
+    await userEvent.type(input, "evidence");
+    expect(await screen.findByText("Evidence")).toBeInTheDocument();
+    expect(screen.getByText("P5")).toBeInTheDocument();
+  });
+});

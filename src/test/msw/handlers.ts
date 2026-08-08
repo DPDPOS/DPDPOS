@@ -3,6 +3,7 @@ import { DEMO_CREDENTIALS } from "@/features/auth/demo-credentials";
 import {
   MFA_USER_EMAIL,
   MFA_USER_PASSWORD,
+  analyticsOverview,
   testTokens,
   testUser,
 } from "./fixtures";
@@ -150,6 +151,60 @@ export const handlers = [
       { status: 401 },
     );
   }),
+
+  // ---- Analytics -----------------------------------------------------------
+  http.get("/api/analytics/dashboard", () =>
+    HttpResponse.json({ success: true, data: analyticsOverview }),
+  ),
+
+  http.get("/api/analytics/compliance-score", () =>
+    HttpResponse.json({
+      success: true,
+      data: analyticsOverview.complianceScore,
+    }),
+  ),
+
+  http.get("/api/analytics/violations", () =>
+    HttpResponse.json({
+      success: true,
+      data: analyticsOverview.violations,
+    }),
+  ),
+
+  http.get("/api/analytics/evidence", () =>
+    HttpResponse.json({ success: true, data: analyticsOverview.evidence }),
+  ),
+
+  http.get("/api/analytics/rights-requests", () =>
+    HttpResponse.json({
+      success: true,
+      data: analyticsOverview.rightsRequests,
+    }),
+  ),
+
+  http.get("/api/analytics/consent", () =>
+    HttpResponse.json({ success: true, data: analyticsOverview.consent }),
+  ),
+
+  http.get("/api/analytics/validations", () =>
+    HttpResponse.json({
+      success: true,
+      data: {
+        totalRules: analyticsOverview.complianceScore.totalRules,
+        passed: analyticsOverview.complianceScore.passed,
+        failed: analyticsOverview.complianceScore.failed,
+      },
+    }),
+  ),
+
+  // ---- Notifications -------------------------------------------------------
+  http.get("/api/notifications/unread-count", () =>
+    HttpResponse.json({ success: true, data: { count: 3 } }),
+  ),
+
+  http.patch("/api/notifications/read-all", () =>
+    HttpResponse.json({ success: true, data: { count: 0 } }),
+  ),
 
   http.get("/api/not-found", () =>
     HttpResponse.json(
