@@ -15,11 +15,13 @@ import type { CreateUserPayload, UpdateUserPayload } from "@/features/users/type
 import type { CreateRolePayload, UpdateRolePermissionsPayload } from "@/features/roles/types";
 import type { CreateDepartmentPayload } from "@/features/departments/types";
 import type { UpdateOrganizationPayload } from "@/features/organizations/types";
+import type { NotificationPreferences } from "@/features/notifications/types";
 import {
   MFA_USER_EMAIL,
   MFA_USER_PASSWORD,
   activityRows,
   analyticsOverview,
+  auditRows,
   consentRows,
   controlRows,
   dataAssetRows,
@@ -27,6 +29,8 @@ import {
   evidenceRows,
   generatedFramework,
   noticeRows,
+  notificationPreferences,
+  notificationRows,
   organizationRow,
   reportRows,
   requirementRows,
@@ -1195,13 +1199,129 @@ export const handlers = [
   }),
 
   // ---- Notifications -------------------------------------------------------
-  http.get("/api/notifications/unread-count", () =>
-    HttpResponse.json({ success: true, data: { count: 3 } }),
+  // The backend list returns `{ items, pagination }` *inside* data — Variant C
+  // of the apiClient list normalizer; the handler mirrors that oddity.
+  http.get("/api/notifications", ({ request }) => {
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
+    const status = url.searchParams.get("status");
+    const notificationType = url.searchParams.get("notificationType");
+    const filtered = notificationRows.filter(
+      (row) =>
+        (!status || row.status === status) &&
+        (!notificationType || row.notificationType === notificationType),
+    );
+    const sliced = filtered.slice((page - 1) * pageSize, page * pageSize);
+    return HttpResponse.json({
+      success: true,
+      data: {
+        items: sliced,
+        pagination: {
+          page,
+          pageSize,
+          total: filtered.length,
+          totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+        },
+      },
+    });
+  }),
+
+  http.get("/api/notifications/unread-count", () => {
+    const count = notificationRows.filter((row) => row.status !== "READ").length;
+    return HttpResponse.json({ success: true, data: { count } });
+  }),
+
+  http.patch("/api/notifications/:id/read", ({ params }) => {
+    const row = notificationRows.find((n) => n.id === params.id);
+    if (!row) {
+      return HttpResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Notification not found" } },
+        { status: 404 },
+      );
+    }
+    row.status = "READ";
+    row.readAt = "2026-08-08T12:00:00.000Z";
+    row.updatedAt = "2026-08-08T12:00:00.000Z";
+    return HttpResponse.json({ success: true, data: { success: true } });
+  }),
+
+  http.patch("/api/notifications/read-all", () => {
+    let updated = 0;
+    for (const row of notificationRows) {
+      if (row.status !== "READ") {
+        row.status = "READ";
+        row.readAt = "2026-08-08T12:00:00.000Z";
+        row.updatedAt = "2026-08-08T12:00:00.000Z";
+        updated += 1;
+      }
+    }
+    return HttpResponse.json({ success: true, data: { updatedCount: updated } });
+  }),
+
+  http.get("/api/notifications/preferences", () =>
+    HttpResponse.json({ success: true, data: { ...notificationPreferences } }),
   ),
 
-  http.patch("/api/notifications/read-all", () =>
-    HttpResponse.json({ success: true, data: { count: 0 } }),
+  http.put("/api/notifications/preferences", async ({ request }) => {
+    const body = (await request.json()) as Partial<NotificationPreferences>;
+    Object.assign(notificationPreferences, body);
+    return HttpResponse.json({ success: true, data: { ...notificationPreferences } });
+  }),
+
+  // ---- Audit ---------------------------------------------------------------
+  // Cursor pagination, not page-based: `{ data: rows, nextCursor }` in data.
+  http.get("/api/audit", ({ request }) => {
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get("limit") ?? 50);
+    const cursor = url.searchParams.get("cursor");
+    const entityType = url.searchParams.get("entityType");
+    const actionType = url.searchParams.get("actionType");
+    const actorUserId = url.searchParams.get("actorUserId");
+    const dateFrom = url.searchParams.get("dateFrom");
+    const dateTo = url.searchParams.get("dateTo");
+
+    let filtered = auditRows.filter(
+      (row) =>
+        (!entityType || row.entityType === entityType) &&
+        (!actionType || row.actionType === actionType) &&
+        (!actorUserId || row.actorUserId === actorUserId) &&
+        (!dateFrom || row.createdAt >= dateFrom) &&
+        (!dateTo || row.createdAt <= dateTo),
+    );
+    if (cursor) {
+      const idx = filtered.findIndex((row) => row.id === cursor);
+      filtered = idx >= 0 ? filtered.slice(idx + 1) : filtered;
+    }
+    const rows = filtered.slice(0, limit);
+    const nextCursor = filtered.length > limit ? rows[rows.length - 1]?.id ?? null : null;
+    return HttpResponse.json({
+      success: true,
+      data: { data: rows, nextCursor },
+    });
+  }),
+
+  http.get("/api/audit/entity/:entityType/:entityId", ({ params }) =>
+    HttpResponse.json({
+      success: true,
+      data: auditRows.filter(
+        (row) =>
+          row.entityType === params.entityType && row.entityId === params.entityId,
+      ),
+    }),
   ),
+
+  http.post("/api/audit/export", () => {
+    const csv = [
+      "date,action,entityType,entityId,actorUserId",
+      ...auditRows.map((row) =>
+        [row.createdAt, row.actionType, row.entityType, row.entityId, row.actorUserId].join(","),
+      ),
+    ].join("\n");
+    return HttpResponse.text(csv, {
+      headers: { "Content-Type": "text/csv" },
+    });
+  }),
 
   http.get("/api/not-found", () =>
     HttpResponse.json(

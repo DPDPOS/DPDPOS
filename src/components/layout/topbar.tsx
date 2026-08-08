@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   CheckCheck,
@@ -18,7 +18,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { useLogout } from "@/features/auth/hooks";
+import {
+  useMarkNotificationRead,
+  useNotificationsPage,
+  useUnreadCount,
+} from "@/features/notifications/hooks";
 import { notificationsApi } from "@/features/notifications/api";
+import { formatDateTime } from "@/lib/utils/format";
 import { queryKeys } from "@/lib/api/queryKeys";
 import {
   accessibleRoutes,
@@ -235,7 +241,7 @@ export function Topbar() {
             onClick={() => setPanel(panel === "bell" ? "none" : "bell")}
           />
           {panel === "bell" ? (
-            <NotificationPanel enabled={canReadNotifications} />
+            <NotificationPanel enabled={canReadNotifications} onNavigate={close} />
           ) : null}
         </div>
 
@@ -360,13 +366,7 @@ function BellButton({
   enabled: boolean;
   onClick: () => void;
 }) {
-  const { data } = useQuery({
-    queryKey: queryKeys.unreadCount,
-    queryFn: notificationsApi.unreadCount,
-    enabled,
-    refetchInterval: 60_000,
-    retry: 0,
-  });
+  const { data } = useUnreadCount(enabled);
   const count = enabled ? data?.count ?? 0 : 0;
 
   return (
@@ -389,22 +389,23 @@ function BellButton({
   );
 }
 
-function NotificationPanel({ enabled }: { enabled: boolean }) {
+function NotificationPanel({
+  enabled,
+  onNavigate,
+}: {
+  enabled: boolean;
+  onNavigate: () => void;
+}) {
   const queryClient = useQueryClient();
-  const { data, isFetching } = useQuery({
-    queryKey: queryKeys.unreadCount,
-    queryFn: notificationsApi.unreadCount,
-    enabled,
-    refetchInterval: 60_000,
-    retry: 0,
-  });
-  const count = data?.count ?? 0;
+  const { data } = useUnreadCount(enabled);
+  const { data: inbox, isFetching } = useNotificationsPage(1, 5, {}, enabled);
+  const markRead = useMarkNotificationRead();
+  const count = enabled ? data?.count ?? 0 : 0;
 
   const markAllRead = async () => {
     if (!enabled || count === 0) return;
     try {
       await notificationsApi.markAllRead();
-      // Invalidation refetches the active unread-count query.
       await queryClient.invalidateQueries({ queryKey: queryKeys.unreadCount });
     } catch {
       // Non-fatal — the dot simply stays.
@@ -412,7 +413,7 @@ function NotificationPanel({ enabled }: { enabled: boolean }) {
   };
 
   return (
-    <div className="absolute right-0 top-10 z-30 w-72 overflow-hidden rounded-sm border border-border bg-surface shadow-lg shadow-ink/5">
+    <div className="absolute right-0 top-10 z-30 w-80 overflow-hidden rounded-sm border border-border bg-surface shadow-lg shadow-ink/5">
       <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
         <p className="text-[13px] font-medium text-ink">Notifications</p>
         <button
@@ -425,24 +426,58 @@ function NotificationPanel({ enabled }: { enabled: boolean }) {
           Mark all read
         </button>
       </div>
-      <div className="p-3">
+      <div className="max-h-80 overflow-y-auto">
         {!enabled ? (
-          <p className="text-[13px] leading-relaxed text-ink-3">
+          <p className="p-3 text-[13px] leading-relaxed text-ink-3">
             You don&apos;t have permission to view notifications.
           </p>
-        ) : count > 0 ? (
-          <p className="text-[13px] leading-relaxed text-ink-2">
-            <span className="tabular font-medium text-ink">{count}</span>{" "}
-            unread notification{count === 1 ? "" : "s"}.
-          </p>
-        ) : (
-          <p className="text-[13px] leading-relaxed text-ink-3">
+        ) : isFetching ? (
+          <div className="space-y-2 p-3">
+            <Spinner size="sm" label="Loading notifications" />
+          </div>
+        ) : (inbox?.items ?? []).length === 0 ? (
+          <p className="p-3 text-[13px] leading-relaxed text-ink-3">
             You&apos;re all caught up.
           </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {(inbox?.items ?? []).slice(0, 5).map((row) => (
+              <li key={row.id} className="flex items-start gap-2 px-3 py-2.5 transition-colors hover:bg-surface-2/50">
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={cn(
+                      "truncate text-[13px]",
+                      row.status === "READ" ? "text-ink-2" : "font-medium text-ink",
+                    )}
+                  >
+                    {row.subject}
+                  </p>
+                  <p className="mt-0.5 tabular font-mono text-[10px] text-ink-3">
+                    {formatDateTime(row.createdAt)}
+                  </p>
+                </div>
+                {row.status !== "READ" ? (
+                  <button
+                    type="button"
+                    onClick={() => markRead.mutate(row.id)}
+                    className="focus-ring mt-0.5 shrink-0 rounded-sm px-1 py-0.5 text-[11px] text-accent transition-colors hover:underline"
+                  >
+                    Read
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         )}
-        <p className="mt-2 border-t border-border pt-2 text-xs leading-relaxed text-ink-3">
-          The full inbox, digests and preferences ship with Phase 3.
-        </p>
+      </div>
+      <div className="border-t border-border p-1.5">
+        <Link
+          href="/notifications"
+          onClick={onNavigate}
+          className="focus-ring block rounded-sm px-2 py-1.5 text-center text-xs font-medium text-accent transition-colors hover:bg-accent-soft"
+        >
+          View all notifications
+        </Link>
       </div>
     </div>
   );

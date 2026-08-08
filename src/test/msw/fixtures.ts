@@ -22,6 +22,8 @@ import type { UserResponse } from "@/features/users/types";
 import type { RoleResponse } from "@/features/roles/types";
 import type { DepartmentResponse } from "@/features/departments/types";
 import type { OrganizationResponse } from "@/features/organizations/types";
+import type { AuditLogRecord } from "@/features/audit/types";
+import type { NotificationRecord } from "@/features/notifications/types";
 import { PERMISSIONS, ALL_PERMISSIONS } from "@/lib/constants/permissions";
 import { DEMO_CREDENTIALS } from "@/features/auth/demo-credentials";
 
@@ -61,6 +63,7 @@ export const adminUser: AuthMeResponse = {
   permissions: [
     "analytics:read",
     "notification:read",
+    "notification:update_preferences",
     "framework:read",
     "framework:generate",
     "framework:publish",
@@ -84,6 +87,7 @@ export const adminUser: AuthMeResponse = {
     "report:read",
     "report:generate",
     "audit:read",
+    "audit:export",
   "user:read",
   "user:create",
   "user:update",
@@ -108,10 +112,6 @@ export const adminUser: AuthMeResponse = {
     "consent:withdraw",
     "organization:read",
     "organization:update",
-    "data_asset:read",
-    "processing_activity:read",
-    "notice:read",
-    "consent:read",
     "rights_request:read",
     "rights_request:create",
     "rights_request:update",
@@ -1200,6 +1200,9 @@ export function resetTestFixtures(): void {
   userRows = structuredClone(seedUserRows);
   roleRows = structuredClone(seedRoleRows);
   organizationRow = { ...seedOrganizationRow };
+  auditRows = [...seedAuditRows];
+  notificationRows = [...seedNotificationRows];
+  Object.assign(notificationPreferences, { email: false, inApp: true, slack: false });
 }
 
 /** Directory rows for owner comboboxes and the People screen. */
@@ -1464,6 +1467,206 @@ const seedOrganizationRow: OrganizationResponse = {
 
 /** Mutable copy — the PATCH handler mutates this object in place. */
 export let organizationRow: OrganizationResponse = { ...seedOrganizationRow };
+
+/** Audit trail seeds — realistic event names from the backend's logEvent. */
+const seedAuditRows: AuditLogRecord[] = [
+  {
+    id: "audit-00000000-0000-4000-8000-000000000001",
+    organizationId: ORG_ID,
+    actorUserId: "usr_demo_admin",
+    actionType: "ViolationCreated",
+    entityType: "Violation",
+    entityId: "vln-00000000-0000-4000-8000-000000000001",
+    beforeJson: null,
+    afterJson: { id: "vln-00000000-0000-4000-8000-000000000001", severity: "HIGH" },
+    ipAddress: "103.21.58.1",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    correlationId: "corr-0a1b2c3d",
+    createdAt: "2026-08-08T09:12:00.000Z",
+  },
+  {
+    id: "audit-00000000-0000-4000-8000-000000000002",
+    organizationId: ORG_ID,
+    actorUserId: "usr_demo_dpo",
+    actionType: "EvidenceApproved",
+    entityType: "EvidenceFile",
+    entityId: "ev-00000000-0000-4000-8000-000000000001",
+    beforeJson: { status: "UNDER_REVIEW" },
+    afterJson: { status: "APPROVED", approvedBy: "usr_demo_dpo" },
+    ipAddress: "103.21.58.2",
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X)",
+    correlationId: "corr-1b2c3d4e",
+    createdAt: "2026-08-08T08:45:00.000Z",
+  },
+  {
+    id: "audit-00000000-0000-4000-8000-000000000003",
+    organizationId: ORG_ID,
+    actorUserId: "usr_demo_compliance",
+    actionType: "ValidationRunCreated",
+    entityType: "ValidationRun",
+    entityId: "run-00000000-0000-4000-8000-000000000001",
+    beforeJson: null,
+    afterJson: { triggerType: "MANUAL" },
+    ipAddress: "103.21.58.3",
+    userAgent: null,
+    correlationId: "corr-2c3d4e5f",
+    createdAt: "2026-08-08T08:00:00.000Z",
+  },
+  {
+    id: "audit-00000000-0000-4000-8000-000000000004",
+    organizationId: ORG_ID,
+    actorUserId: null,
+    actionType: "FrameworkPublished",
+    entityType: "Framework",
+    entityId: FRAMEWORK_ID,
+    beforeJson: { status: "DRAFT" },
+    afterJson: { status: "PUBLISHED" },
+    ipAddress: null,
+    userAgent: null,
+    correlationId: "corr-5f607182",
+    createdAt: "2026-08-07T17:30:00.000Z",
+  },
+  {
+    id: "audit-00000000-0000-4000-8000-000000000005",
+    organizationId: ORG_ID,
+    actorUserId: "usr_demo_admin",
+    actionType: "RolePermissionsUpdated",
+    entityType: "Role",
+    entityId: "role_privacy_analyst",
+    beforeJson: { permissions: ["data_asset:read"] },
+    afterJson: { permissions: ["data_asset:read", "notice:create"] },
+    ipAddress: "103.21.58.1",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    correlationId: "corr-3d4e5f60",
+    createdAt: "2026-08-06T09:30:00.000Z",
+  },
+  {
+    id: "audit-00000000-0000-4000-8000-000000000006",
+    organizationId: ORG_ID,
+    actorUserId: "usr_demo_admin",
+    actionType: "UserInvited",
+    entityType: "User",
+    entityId: "usr_demo_invited",
+    beforeJson: null,
+    afterJson: { email: "rohan@demo.dpdpos.local", status: "INVITED" },
+    ipAddress: "103.21.58.1",
+    userAgent: "Mozilla/5.0",
+    correlationId: "corr-4e5f6071",
+    createdAt: "2026-08-05T10:00:00.000Z",
+  },
+];
+
+/** Notification center seeds — types from the backend template map. */
+const seedNotificationRows: NotificationRecord[] = [
+  {
+    id: "ntf-00000000-0000-4000-8000-000000000001",
+    organizationId: ORG_ID,
+    recipientUserId: "usr_demo_admin",
+    notificationType: "VIOLATION_CREATED",
+    channel: "IN_APP",
+    subject: "New Violation: Retention gap in HR data",
+    body: "A new HIGH violation has been opened and requires attention.",
+    status: "SENT",
+    sentAt: "2026-08-08T09:12:00.000Z",
+    readAt: null,
+    relatedEntityType: "VIOLATION",
+    relatedEntityId: "vln-00000000-0000-4000-8000-000000000001",
+    retryCount: 0,
+    createdAt: "2026-08-08T09:12:00.000Z",
+    updatedAt: "2026-08-08T09:12:00.000Z",
+  },
+  {
+    id: "ntf-00000000-0000-4000-8000-000000000002",
+    organizationId: ORG_ID,
+    recipientUserId: "usr_demo_admin",
+    notificationType: "EVIDENCE_APPROVED",
+    channel: "IN_APP",
+    subject: "Evidence Approved: consent-log.csv",
+    body: "Evidence file has been approved.",
+    status: "READ",
+    sentAt: "2026-08-08T08:45:00.000Z",
+    readAt: "2026-08-08T09:00:00.000Z",
+    relatedEntityType: "EVIDENCE",
+    relatedEntityId: "ev-00000000-0000-4000-8000-000000000001",
+    retryCount: 0,
+    createdAt: "2026-08-08T08:45:00.000Z",
+    updatedAt: "2026-08-08T09:00:00.000Z",
+  },
+  {
+    id: "ntf-00000000-0000-4000-8000-000000000003",
+    organizationId: ORG_ID,
+    recipientUserId: "usr_demo_admin",
+    notificationType: "VALIDATION_FAILED",
+    channel: "IN_APP",
+    subject: "Validation run found 3 failures",
+    body: "Validation run found 3 failure(s). Review needed.",
+    status: "SENT",
+    sentAt: "2026-08-08T08:00:00.000Z",
+    readAt: null,
+    relatedEntityType: "VALIDATION_RUN",
+    relatedEntityId: "run-00000000-0000-4000-8000-000000000001",
+    retryCount: 0,
+    createdAt: "2026-08-08T08:00:00.000Z",
+    updatedAt: "2026-08-08T08:00:00.000Z",
+  },
+  {
+    id: "ntf-00000000-0000-4000-8000-000000000004",
+    organizationId: ORG_ID,
+    recipientUserId: "usr_demo_admin",
+    notificationType: "SLA_WARNING",
+    channel: "IN_APP",
+    subject: "SLA Warning",
+    body: "Item is approaching its due date.",
+    status: "FAILED",
+    sentAt: null,
+    readAt: null,
+    relatedEntityType: null,
+    relatedEntityId: null,
+    retryCount: 2,
+    createdAt: "2026-08-07T16:00:00.000Z",
+    updatedAt: "2026-08-07T16:05:00.000Z",
+  },
+  {
+    id: "ntf-00000000-0000-4000-8000-000000000005",
+    organizationId: ORG_ID,
+    recipientUserId: "usr_demo_admin",
+    notificationType: "REPORT_GENERATED",
+    channel: "EMAIL",
+    subject: "Report Ready: Board Pack Q2",
+    body: "Your report is ready for download.",
+    status: "SENT",
+    sentAt: "2026-08-06T11:00:00.000Z",
+    readAt: null,
+    relatedEntityType: "REPORT",
+    relatedEntityId: "rpt-00000000-0000-4000-8000-000000000001",
+    retryCount: 0,
+    createdAt: "2026-08-06T11:00:00.000Z",
+    updatedAt: "2026-08-06T11:00:00.000Z",
+  },
+  {
+    id: "ntf-00000000-0000-4000-8000-000000000006",
+    organizationId: ORG_ID,
+    recipientUserId: "usr_demo_admin",
+    notificationType: "RIGHTS_REQUEST_SUBMITTED",
+    channel: "IN_APP",
+    subject: "New Rights Request",
+    body: "A new ACCESS request has been submitted.",
+    status: "READ",
+    sentAt: "2026-08-05T09:30:00.000Z",
+    readAt: "2026-08-05T10:00:00.000Z",
+    relatedEntityType: null,
+    relatedEntityId: null,
+    retryCount: 0,
+    createdAt: "2026-08-05T09:30:00.000Z",
+    updatedAt: "2026-08-05T10:00:00.000Z",
+  },
+];
+
+/** Mutable MSW registries. */
+export let auditRows: AuditLogRecord[] = [...seedAuditRows];
+export let notificationRows: NotificationRecord[] = [...seedNotificationRows];
+
+export const notificationPreferences = { email: false, inApp: true, slack: false };
 
 /** Realistic overview mirroring the analytics module's aggregate shape. */
 export const analyticsOverview: DashboardOverview = {

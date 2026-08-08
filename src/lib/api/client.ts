@@ -16,7 +16,7 @@ export type QueryParams = Record<
 >;
 
 /** Base URL — default to the Next.js /api rewrite (next.config.ts). */
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
+export const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 
 /** Builds a query string, skipping undefined/null/empty values. */
 export function buildQuery(params?: QueryParams): string {
@@ -77,8 +77,29 @@ export async function apiList<T>(
       total?: number;
       page?: number;
       pageSize?: number;
+      pagination?: {
+        page?: number;
+        pageSize?: number;
+        total?: number;
+        totalPages?: number;
+      };
     };
     const items = boxed.items ?? boxed.data;
+    // Variant C — `{ data: { items: [...], pagination: { page, pageSize,
+    // total, totalPages } } }` (notifications service shape).
+    if (Array.isArray(items) && boxed.pagination && typeof boxed.pagination.total === "number") {
+      return {
+        items,
+        meta: {
+          page: boxed.pagination.page ?? 1,
+          pageSize: boxed.pagination.pageSize ?? items.length,
+          total: boxed.pagination.total,
+          totalPages:
+            boxed.pagination.totalPages ??
+            Math.max(1, Math.ceil(boxed.pagination.total / (boxed.pagination.pageSize ?? items.length))),
+        },
+      };
+    }
     if (Array.isArray(items) && typeof boxed.total === "number") {
       const page = boxed.page ?? 1;
       const pageSize = boxed.pageSize ?? items.length;

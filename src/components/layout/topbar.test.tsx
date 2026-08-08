@@ -50,19 +50,27 @@ describe("Topbar", () => {
 
   it("polls the unread count and shows the dot", async () => {
     renderWithProviders(<Topbar />);
+    // Seeds: 4 rows are not READ (SENT ×3 + FAILED ×1).
     expect(
-      await screen.findByLabelText("Notifications (3 unread)"),
+      await screen.findByLabelText("Notifications (4 unread)"),
     ).toBeInTheDocument();
   });
 
-  it("opens the notification panel with the unread count", async () => {
+  it("opens the notification panel listing recent alerts with mark-read", async () => {
     renderWithProviders(<Topbar />);
     fireEvent.click(
-      await screen.findByLabelText("Notifications (3 unread)"),
+      await screen.findByLabelText("Notifications (4 unread)"),
     );
+    // The panel lists the inbox feed (backend-shaped rows).
     expect(
-      await screen.findByText(/unread notifications?\./),
+      await screen.findByText("New Violation: Retention gap in HR data"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("Validation run found 3 failures"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View all notifications" }),
+    ).toHaveAttribute("href", "/notifications");
   });
 
   it("hides the dot without notification:read", async () => {
@@ -90,9 +98,9 @@ describe("Topbar", () => {
     const input = screen.getByLabelText("Search pages");
     expect(input).toBeInTheDocument();
 
-    await userEvent.type(input, "audit");
-    expect(await screen.findByText("Audit")).toBeInTheDocument();
-    // Audit is phase 5 == CURRENT_PHASE but not shipped → "Soon" chip.
+    await userEvent.type(input, "ai");
+    expect(await screen.findByText("AI assistant")).toBeInTheDocument();
+    // AI assistant is a future phase (not shipped) → "Soon" chip.
     expect(screen.getByText("Soon")).toBeInTheDocument();
   });
 });

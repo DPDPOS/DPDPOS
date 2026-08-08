@@ -120,9 +120,9 @@ describe("Sidebar", () => {
     render(<Sidebar />);
 
     expect(screen.queryByText("Controls")).not.toBeInTheDocument();
-    // Audit is still upcoming — Evidence/Reports shipped in Phase 6.
+    // AI assistant is still upcoming — phases 1-10 are all shipped.
     expect(
-      screen.getByTitle("Audit — arriving in Phase 5"),
+      screen.getByTitle("AI assistant — arriving in Phase 5"),
     ).toBeInTheDocument();
     expect(screen.getByTitle(/Dashboard/)).toBeInTheDocument();
   });

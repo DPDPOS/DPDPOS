@@ -154,7 +154,6 @@ describe("RolesView (§9.14)", () => {
   });
 
   it("locks system roles — no Permissions action and no edits inside", async () => {
-    const user = userEvent.setup();
     renderWithProviders(<RolesView />);
     const table = await screen.findByRole("table");
     await within(table).findByText("ORG_ADMIN");
