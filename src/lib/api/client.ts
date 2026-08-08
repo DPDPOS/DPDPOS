@@ -45,8 +45,13 @@ export async function api<T>(
 }
 
 /**
- * Server-paginated list call — unwraps the envelope AND the pagination meta
- * (`sendSuccess(res, items, 200, meta)` on the backend).
+ * Server-paginated list call — unwraps the envelope AND the pagination meta.
+ * The backend sends the pagination object flat in `meta` for most modules
+ * (`sendSuccess(res, items, 200, { pagination })` shaped), but the evidence
+ * and reports modules return the paged shape *inside* `data` with no meta
+ * (`{ items|data, total, page, pageSize }`). Both are normalized here so
+ * feature code always receives `{ items, meta }` — one unwrap layer, never
+ * per-request handling.
  */
 export interface ListResult<T> {
   items: T[];
@@ -57,16 +62,43 @@ export async function apiList<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<ListResult<T>> {
-  const { data, meta } = await requestEnvelope<T[]>(path, options, false);
-  // The backend's list envelope carries the pagination object flat in `meta`.
-  if (!meta || typeof meta.page !== "number") {
-    throw new ApiError({
-      code: "INTERNAL_ERROR",
-      message: "Malformed paginated API response",
-      status: 0,
-    });
+  const { data, meta } = await requestEnvelope<unknown>(path, options, false);
+
+  // Variant A — `{ data: [...], meta: { page, pageSize, total, totalPages } }`.
+  if (Array.isArray(data) && meta && typeof meta.page === "number") {
+    return { items: data as T[], meta };
   }
-  return { items: data, meta };
+
+  // Variant B — `{ data: { items: [...] | data: [...], total, page, pageSize } }`.
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const boxed = data as {
+      items?: T[];
+      data?: T[];
+      total?: number;
+      page?: number;
+      pageSize?: number;
+    };
+    const items = boxed.items ?? boxed.data;
+    if (Array.isArray(items) && typeof boxed.total === "number") {
+      const page = boxed.page ?? 1;
+      const pageSize = boxed.pageSize ?? items.length;
+      return {
+        items,
+        meta: {
+          page,
+          pageSize,
+          total: boxed.total,
+          totalPages: Math.max(1, Math.ceil(boxed.total / pageSize)),
+        },
+      };
+    }
+  }
+
+  throw new ApiError({
+    code: "INTERNAL_ERROR",
+    message: "Malformed paginated API response",
+    status: 0,
+  });
 }
 
 interface EnvelopeResult<T> {

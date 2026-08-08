@@ -60,7 +60,7 @@ describe("Sidebar", () => {
       "href",
       "/dashboard",
     );
-    // Phases 3–5 shipped the programme, inventory and transparency screens.
+    // Phases 3–6 shipped the programme, inventory, transparency and proof screens.
     expect(screen.getByRole("link", { name: "Controls" })).toHaveAttribute(
       "href",
       "/controls",
@@ -84,6 +84,14 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Consent" })).toHaveAttribute(
       "href",
       "/consent",
+    );
+    expect(screen.getByRole("link", { name: "Evidence" })).toHaveAttribute(
+      "href",
+      "/evidence",
+    );
+    expect(screen.getByRole("link", { name: "Reports" })).toHaveAttribute(
+      "href",
+      "/reports",
     );
 
     // Every remaining planned screen is within the build horizon, so they all
@@ -112,8 +120,9 @@ describe("Sidebar", () => {
     render(<Sidebar />);
 
     expect(screen.queryByText("Controls")).not.toBeInTheDocument();
+    // Audit is still upcoming — Evidence/Reports shipped in Phase 6.
     expect(
-      screen.getByTitle("Evidence — arriving in Phase 5"),
+      screen.getByTitle("Audit — arriving in Phase 5"),
     ).toBeInTheDocument();
     expect(screen.getByTitle(/Dashboard/)).toBeInTheDocument();
   });

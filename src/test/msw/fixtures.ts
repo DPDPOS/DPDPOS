@@ -3,9 +3,11 @@ import type { DashboardOverview } from "@/features/analytics/types";
 import type { ControlResponse } from "@/features/controls/types";
 import type { ConsentRecordResponse } from "@/features/consent/types";
 import type { DataAssetResponse } from "@/features/dataAssets/types";
+import type { EvidenceFileRecord } from "@/features/evidence/types";
 import type { FrameworkResponse } from "@/features/framework/types";
 import type { NoticeResponse } from "@/features/notices/types";
 import type { ProcessingActivityResponse } from "@/features/processingActivities/types";
+import type { ReportRecord } from "@/features/reports/types";
 import type { RequirementResponse } from "@/features/requirements/types";
 import type { UserResponse } from "@/features/users/types";
 import type { DepartmentResponse } from "@/features/departments/types";
@@ -59,7 +61,11 @@ export const adminUser: AuthMeResponse = {
     "violation:read",
     "remediation:read",
     "evidence:read",
+    "evidence:create",
+    "evidence:approve",
+    "evidence:export",
     "report:read",
+    "report:generate",
     "audit:read",
     "user:read",
     "role:read",
@@ -436,6 +442,190 @@ const seedConsentRecords: ConsentRecordResponse[] = [
   },
 ];
 
+/** Generated proof — evidence spanning the lifecycle, reports across statuses. */
+const seedEvidenceRows: EvidenceFileRecord[] = [
+  {
+    id: "ev000000-0000-4000-8000-000000000001",
+    organizationId: ORG_ID,
+    fileName: "consent-capture-screenshot.png",
+    storageKey: `evidence/${ORG_ID}/ev000000-0000-4000-8000-000000000001/consent-capture-screenshot.png`,
+    mimeType: "image/png",
+    fileHash: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    fileSizeBytes: 214_520,
+    description: "Consent checkbox flow captured from staging.",
+    tags: ["consent", "screenshot"],
+    status: "APPROVED",
+    controlId: "c0000000-0000-4000-8000-000000000002",
+    violationId: null,
+    uploadedBy: "usr_demo_admin",
+    reviewedBy: "usr_demo_admin",
+    approvedBy: "usr_demo_admin",
+    lockedAt: null,
+    expiresAt: null,
+    createdBy: "usr_demo_admin",
+    updatedBy: "usr_demo_admin",
+    createdAt: "2026-07-20T10:00:00.000Z",
+    updatedAt: "2026-07-25T12:30:00.000Z",
+    deletedAt: null,
+  },
+  {
+    id: "ev000000-0000-4000-8000-000000000002",
+    organizationId: ORG_ID,
+    fileName: "dpo-appointment-letter.pdf",
+    storageKey: `evidence/${ORG_ID}/ev000000-0000-4000-8000-000000000002/dpo-appointment-letter.pdf`,
+    mimeType: "application/pdf",
+    fileHash: "60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752",
+    fileSizeBytes: 182_400,
+    description: "Board-approved appointment of the Data Protection Officer.",
+    tags: ["dpo", "sdf", "board"],
+    status: "LOCKED",
+    controlId: "c0000000-0000-4000-8000-000000000003",
+    violationId: null,
+    uploadedBy: "usr_demo_admin",
+    reviewedBy: "usr_demo_admin",
+    approvedBy: "usr_demo_admin",
+    lockedAt: "2026-08-01T09:15:00.000Z",
+    expiresAt: null,
+    createdBy: "usr_demo_admin",
+    updatedBy: "usr_demo_admin",
+    createdAt: "2026-07-15T09:00:00.000Z",
+    updatedAt: "2026-08-01T09:15:00.000Z",
+    deletedAt: null,
+  },
+  {
+    id: "ev000000-0000-4000-8000-000000000003",
+    organizationId: ORG_ID,
+    fileName: "notice-v1-published.html",
+    storageKey: `evidence/${ORG_ID}/ev000000-0000-4000-8000-000000000003/notice-v1-published.html`,
+    mimeType: "text/html",
+    fileHash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+    fileSizeBytes: 12_912,
+    description: "Published privacy notice archive — v1 snapshot.",
+    tags: ["notice"],
+    status: "UNDER_REVIEW",
+    controlId: "c0000000-0000-4000-8000-000000000001",
+    violationId: null,
+    uploadedBy: "usr_demo_admin",
+    reviewedBy: null,
+    approvedBy: null,
+    lockedAt: null,
+    expiresAt: null,
+    createdBy: "usr_demo_admin",
+    updatedBy: "usr_demo_admin",
+    createdAt: "2026-08-02T10:00:00.000Z",
+    updatedAt: "2026-08-03T10:00:00.000Z",
+    deletedAt: null,
+  },
+  {
+    id: "ev000000-0000-4000-8000-000000000004",
+    organizationId: ORG_ID,
+    fileName: "retention-policy.xlsx",
+    storageKey: `evidence/${ORG_ID}/ev000000-0000-4000-8000-000000000004/retention-policy.xlsx`,
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    fileHash: null,
+    fileSizeBytes: 48_120,
+    description: "Retention schedule draft — awaiting review.",
+    tags: ["retention"],
+    status: "TAGGED",
+    controlId: null,
+    violationId: null,
+    uploadedBy: "usr_demo_admin",
+    reviewedBy: null,
+    approvedBy: null,
+    lockedAt: null,
+    expiresAt: null,
+    createdBy: "usr_demo_admin",
+    updatedBy: "usr_demo_admin",
+    createdAt: "2026-08-05T14:00:00.000Z",
+    updatedAt: "2026-08-05T14:05:00.000Z",
+    deletedAt: null,
+  },
+  {
+    id: "ev000000-0000-4000-8000-000000000005",
+    organizationId: ORG_ID,
+    fileName: "penetration-test-report.pdf",
+    storageKey: `evidence/${ORG_ID}/ev000000-0000-4000-8000-000000000005/penetration-test-report.pdf`,
+    mimeType: "application/pdf",
+    fileHash: null,
+    fileSizeBytes: null,
+    description: "Q3 external penetration test.",
+    tags: [],
+    status: "UPLOADED",
+    controlId: null,
+    violationId: null,
+    uploadedBy: "usr_demo_admin",
+    reviewedBy: null,
+    approvedBy: null,
+    lockedAt: null,
+    expiresAt: null,
+    createdBy: "usr_demo_admin",
+    updatedBy: "usr_demo_admin",
+    createdAt: "2026-08-07T09:00:00.000Z",
+    updatedAt: "2026-08-07T09:00:00.000Z",
+    deletedAt: null,
+  },
+];
+
+const seedReportRows: ReportRecord[] = [
+  {
+    id: "rpt00000-0000-4000-8000-000000000001",
+    organizationId: ORG_ID,
+    reportType: "BOARD_PACK",
+    title: "Board pack — July 2026",
+    status: "COMPLETED",
+    format: "PDF",
+    generatedBy: "usr_demo_admin",
+    storageKey: `reports/${ORG_ID}/rpt00000-0000-4000-8000-000000000001/board-pack.pdf`,
+    parameters: { dateFrom: "2026-07-01T00:00:00.000Z", dateTo: "2026-07-31T23:59:59.000Z" },
+    startedAt: "2026-08-01T08:00:00.000Z",
+    completedAt: "2026-08-01T08:00:14.000Z",
+    errorMessage: null,
+    createdBy: "usr_demo_admin",
+    updatedBy: "usr_demo_admin",
+    createdAt: "2026-08-01T08:00:00.000Z",
+    updatedAt: "2026-08-01T08:00:14.000Z",
+    deletedAt: null,
+  },
+  {
+    id: "rpt00000-0000-4000-8000-000000000002",
+    organizationId: ORG_ID,
+    reportType: "COMPLIANCE_SUMMARY",
+    title: "Compliance summary — Q3",
+    status: "GENERATING",
+    format: "CSV",
+    generatedBy: "usr_demo_admin",
+    storageKey: null,
+    parameters: null,
+    startedAt: "2026-08-08T09:00:00.000Z",
+    completedAt: null,
+    errorMessage: null,
+    createdBy: "usr_demo_admin",
+    updatedBy: "usr_demo_admin",
+    createdAt: "2026-08-08T09:00:00.000Z",
+    updatedAt: "2026-08-08T09:00:00.000Z",
+    deletedAt: null,
+  },
+  {
+    id: "rpt00000-0000-4000-8000-000000000003",
+    organizationId: ORG_ID,
+    reportType: "VIOLATION_REPORT",
+    title: "Violation report",
+    status: "FAILED",
+    format: "EXCEL",
+    generatedBy: "usr_demo_admin",
+    storageKey: null,
+    parameters: null,
+    startedAt: null,
+    completedAt: null,
+    errorMessage: "Storage write failed — bucket unavailable.",
+    createdBy: "usr_demo_admin",
+    updatedBy: "usr_demo_admin",
+    createdAt: "2026-08-06T11:30:00.000Z",
+    updatedAt: "2026-08-06T11:30:05.000Z",
+    deletedAt: null,
+  },
+];
+
 /**
  * Mutable registries the MSW handlers read and write (create/map/update
  * mutate them). Exported as `let` and restored by resetTestFixtures() so
@@ -448,6 +638,8 @@ export let activityRows: ProcessingActivityResponse[] = [...seedActivities];
 export let departmentRows: DepartmentResponse[] = [...seedDepartments];
 export let noticeRows: NoticeResponse[] = [...seedNotices];
 export let consentRows: ConsentRecordResponse[] = [...seedConsentRecords];
+export let evidenceRows: EvidenceFileRecord[] = [...seedEvidenceRows];
+export let reportRows: ReportRecord[] = [...seedReportRows];
 
 /** Restores the mutable MSW registries to their seed state. */
 export function resetTestFixtures(): void {
@@ -458,6 +650,8 @@ export function resetTestFixtures(): void {
   departmentRows = [...seedDepartments];
   noticeRows = [...seedNotices];
   consentRows = [...seedConsentRecords];
+  evidenceRows = [...seedEvidenceRows];
+  reportRows = [...seedReportRows];
 }
 
 /** Directory rows for owner comboboxes. */

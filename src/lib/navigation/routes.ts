@@ -62,7 +62,7 @@ export function isRouteLive(route: AppRoute): boolean {
 }
 
 /** Build phase shipped so far — later-phase nav items render disabled. */
-export const CURRENT_PHASE = 5;
+export const CURRENT_PHASE = 6;
 
 export const NAV_GROUPS: NavGroup[] = [
   "Overview",
@@ -216,6 +216,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: Paperclip,
     permission: "evidence:read",
     phase: 5,
+    shipped: true,
   },
   {
     href: "/reports",
@@ -225,6 +226,7 @@ export const APP_ROUTES: AppRoute[] = [
     icon: FileBarChart2,
     permission: "report:read",
     phase: 5,
+    shipped: true,
   },
   {
     href: "/audit",

@@ -90,9 +90,9 @@ describe("Topbar", () => {
     const input = screen.getByLabelText("Search pages");
     expect(input).toBeInTheDocument();
 
-    await userEvent.type(input, "evidence");
-    expect(await screen.findByText("Evidence")).toBeInTheDocument();
-    // Evidence is phase 5 == CURRENT_PHASE but not shipped → "Soon" chip.
+    await userEvent.type(input, "audit");
+    expect(await screen.findByText("Audit")).toBeInTheDocument();
+    // Audit is phase 5 == CURRENT_PHASE but not shipped → "Soon" chip.
     expect(screen.getByText("Soon")).toBeInTheDocument();
   });
 });

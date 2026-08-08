@@ -1,5 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { DEMO_CREDENTIALS } from "@/features/auth/demo-credentials";
+import type { EvidenceFileRecord } from "@/features/evidence/types";
+import type { ReportRecord } from "@/features/reports/types";
 import {
   MFA_USER_EMAIL,
   MFA_USER_PASSWORD,
@@ -9,8 +11,10 @@ import {
   controlRows,
   dataAssetRows,
   departmentRows,
+  evidenceRows,
   generatedFramework,
   noticeRows,
+  reportRows,
   requirementRows,
   testTokens,
   testUser,
@@ -585,6 +589,369 @@ export const handlers = [
     record.withdrawnAt = "2026-08-08T10:00:00.000Z";
     record.updatedAt = "2026-08-08T10:00:00.000Z";
     return HttpResponse.json({ success: true, data: record });
+  }),
+
+  // ---- Evidence ----------------------------------------------------------------
+  // The backend returns the paged shape *inside* `data` with no `meta` — the
+  // API client's apiList normalizes it; the handlers mirror the oddity exactly.
+  http.get("/api/evidence", ({ request }) => {
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status");
+    const controlId = url.searchParams.get("controlId");
+    const page = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
+    let rows = evidenceRows;
+    if (status) rows = rows.filter((row) => row.status === status);
+    if (controlId) rows = rows.filter((row) => row.controlId === controlId);
+    const items = rows.slice((page - 1) * pageSize, page * pageSize);
+    return HttpResponse.json({
+      success: true,
+      data: { items, total: rows.length, page, pageSize },
+    });
+  }),
+
+  http.get("/api/evidence/:id", ({ params }) => {
+    const record = evidenceRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Evidence not found" },
+        },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({ success: true, data: record });
+  }),
+
+  http.get("/api/evidence/:id/download", ({ params }) => {
+    const record = evidenceRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Evidence not found" },
+        },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({
+      success: true,
+      data: {
+        downloadUrl: `https://evidence-bucket.mock/${record.storageKey}?X-Amz-Signature=demo`,
+      },
+    });
+  }),
+
+  http.post("/api/evidence", async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const id = `ev-${Date.now()}`;
+    const record: EvidenceFileRecord = {
+      id,
+      organizationId: DEMO_CREDENTIALS.organizationId,
+      fileName: String(body.fileName),
+      storageKey: `evidence/${DEMO_CREDENTIALS.organizationId}/${id}/${body.fileName}`,
+      mimeType: String(body.mimeType),
+      fileHash: null,
+      fileSizeBytes: null,
+      description: (body.description as string) ?? null,
+      tags: (body.tags as string[]) ?? [],
+      status: "UPLOADED",
+      controlId: (body.controlId as string) ?? null,
+      violationId: (body.violationId as string) ?? null,
+      uploadedBy: "usr_demo_admin",
+      reviewedBy: null,
+      approvedBy: null,
+      lockedAt: null,
+      expiresAt: null,
+      createdBy: "usr_demo_admin",
+      updatedBy: "usr_demo_admin",
+      createdAt: "2026-08-08T10:00:00.000Z",
+      updatedAt: "2026-08-08T10:00:00.000Z",
+      deletedAt: null,
+    };
+    evidenceRows.push(record);
+    return HttpResponse.json(
+      {
+        success: true,
+        data: {
+          evidence: record,
+          uploadUrl: `https://evidence-bucket.mock/${record.storageKey}?X-Amz-Signature=demo`,
+        },
+      },
+      { status: 201 },
+    );
+  }),
+
+  // The presigned PUT target — the component uploads the bytes here before
+  // confirming with the hash (mirrors S3 in the demo).
+  http.put("https://evidence-bucket.mock/*", () =>
+    HttpResponse.json({ success: true }, { status: 200 }),
+  ),
+
+  http.patch("/api/evidence/:id/confirm", async ({ request, params }) => {
+    const body = (await request.json()) as { fileHash: string; fileSizeBytes: number };
+    const record = evidenceRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Evidence not found" },
+        },
+        { status: 404 },
+      );
+    }
+    record.fileHash = body.fileHash;
+    record.fileSizeBytes = body.fileSizeBytes;
+    record.updatedAt = "2026-08-08T10:00:00.000Z";
+    return HttpResponse.json({ success: true, data: record });
+  }),
+
+  http.patch("/api/evidence/:id/tag", async ({ request, params }) => {
+    const body = (await request.json()) as { tags: string[]; description?: string };
+    const record = evidenceRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Evidence not found" },
+        },
+        { status: 404 },
+      );
+    }
+    if (record.status !== "UPLOADED") {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: `Invalid state transition from ${record.status} to TAGGED`,
+          },
+        },
+        { status: 409 },
+      );
+    }
+    record.tags = body.tags;
+    if (body.description !== undefined) record.description = body.description;
+    record.status = "TAGGED";
+    record.updatedAt = "2026-08-08T10:00:00.000Z";
+    return HttpResponse.json({ success: true, data: record });
+  }),
+
+  http.patch("/api/evidence/:id/map", async ({ request, params }) => {
+    const body = (await request.json()) as { controlId: string };
+    const record = evidenceRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Evidence not found" },
+        },
+        { status: 404 },
+      );
+    }
+    if (!["UPLOADED", "TAGGED"].includes(record.status)) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: `Invalid state transition from ${record.status} to MAPPED`,
+          },
+        },
+        { status: 409 },
+      );
+    }
+    record.controlId = body.controlId;
+    record.status = "MAPPED";
+    record.updatedAt = "2026-08-08T10:00:00.000Z";
+    return HttpResponse.json({ success: true, data: record });
+  }),
+
+  http.patch("/api/evidence/:id/submit-review", ({ params }) => {
+    const record = evidenceRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Evidence not found" },
+        },
+        { status: 404 },
+      );
+    }
+    if (!["UPLOADED", "MAPPED"].includes(record.status)) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: `Invalid state transition from ${record.status} to UNDER_REVIEW`,
+          },
+        },
+        { status: 409 },
+      );
+    }
+    record.status = "UNDER_REVIEW";
+    record.reviewedBy = "usr_demo_admin";
+    record.updatedAt = "2026-08-08T10:00:00.000Z";
+    return HttpResponse.json({ success: true, data: record });
+  }),
+
+  http.patch("/api/evidence/:id/approve", ({ params }) => {
+    const record = evidenceRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Evidence not found" },
+        },
+        { status: 404 },
+      );
+    }
+    if (record.status !== "UNDER_REVIEW") {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: `Invalid state transition from ${record.status} to APPROVED`,
+          },
+        },
+        { status: 409 },
+      );
+    }
+    record.status = "APPROVED";
+    record.approvedBy = "usr_demo_admin";
+    record.updatedAt = "2026-08-08T10:00:00.000Z";
+    return HttpResponse.json({ success: true, data: record });
+  }),
+
+  http.patch("/api/evidence/:id/lock", ({ params }) => {
+    const record = evidenceRows.find((row) => row.id === params.id);
+    if (!record) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Evidence not found" },
+        },
+        { status: 404 },
+      );
+    }
+    if (record.status !== "APPROVED") {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: `Invalid state transition from ${record.status} to LOCKED`,
+          },
+        },
+        { status: 409 },
+      );
+    }
+    record.status = "LOCKED";
+    record.lockedAt = "2026-08-08T10:00:00.000Z";
+    record.updatedAt = "2026-08-08T10:00:00.000Z";
+    return HttpResponse.json({ success: true, data: record });
+  }),
+
+  http.post("/api/evidence/export", async ({ request }) => {
+    await request.json().catch(() => null);
+    return HttpResponse.json(
+      { success: true, data: { jobId: `exp-${Date.now()}`, status: "PENDING" } },
+      { status: 202 },
+    );
+  }),
+
+  // ---- Reports ----------------------------------------------------------------
+  // Same paged-inside-data oddity as evidence — no `meta` in the envelope.
+  http.get("/api/reports", ({ request }) => {
+    const url = new URL(request.url);
+    const reportType = url.searchParams.get("reportType");
+    const status = url.searchParams.get("status");
+    const page = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
+    let rows = reportRows;
+    if (reportType) rows = rows.filter((row) => row.reportType === reportType);
+    if (status) rows = rows.filter((row) => row.status === status);
+    const items = rows.slice((page - 1) * pageSize, page * pageSize);
+    return HttpResponse.json({
+      success: true,
+      data: { data: items, total: rows.length, page, pageSize },
+    });
+  }),
+
+  http.post("/api/reports", async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const type = String(body.reportType ?? "BOARD_PACK");
+    const title =
+      (body.title as string) ||
+      `Board pack — ${new Date().toISOString().slice(0, 10)}`;
+    const record: ReportRecord = {
+      id: `rpt-${Date.now()}`,
+      organizationId: DEMO_CREDENTIALS.organizationId,
+      reportType: type,
+      title,
+      status: "PENDING",
+      format: String(body.format ?? "CSV"),
+      generatedBy: "usr_demo_admin",
+      storageKey: null,
+      parameters: (body.parameters as ReportRecord["parameters"]) ?? null,
+      startedAt: null,
+      completedAt: null,
+      errorMessage: null,
+      createdBy: "usr_demo_admin",
+      updatedBy: "usr_demo_admin",
+      createdAt: "2026-08-08T10:00:00.000Z",
+      updatedAt: "2026-08-08T10:00:00.000Z",
+      deletedAt: null,
+    };
+    reportRows.unshift(record);
+    return HttpResponse.json({ success: true, data: record }, { status: 201 });
+  }),
+
+  http.get("/api/reports/:id/download", ({ params }) => {
+    const record = reportRows.find((row) => row.id === params.id);
+    if (!record || record.status !== "COMPLETED") {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "CONFLICT", message: "Report is not completed or has no file" },
+        },
+        { status: 409 },
+      );
+    }
+    return HttpResponse.json({
+      success: true,
+      data: { downloadUrl: `https://reports-bucket.mock/${record.storageKey}?X-Amz-Signature=demo` },
+    });
+  }),
+
+  http.delete("/api/reports/:id", ({ params }) => {
+    const index = reportRows.findIndex((row) => row.id === params.id);
+    if (index === -1) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Report not found" },
+        },
+        { status: 404 },
+      );
+    }
+    if (!["PENDING", "GENERATING"].includes(reportRows[index].status)) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: "Only pending or generating reports can be cancelled",
+          },
+        },
+        { status: 409 },
+      );
+    }
+    const [removed] = reportRows.splice(index, 1);
+    return HttpResponse.json({ success: true, data: { cancelled: true, id: removed.id } });
   }),
 
   // ---- Departments ------------------------------------------------------------
