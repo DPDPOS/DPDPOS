@@ -30,6 +30,8 @@ type IdentityProvider = {
   hasClientSecret: boolean;
   tenantId: string | null;
   ldapHost: string | null;
+  ldapPort: number | null;
+  ldapUseTls: boolean | null;
 };
 
 export function IdentitySettingsPanel() {
@@ -60,9 +62,11 @@ export function IdentitySettingsPanel() {
 
   const [ldapName, setLdapName] = useState("Windows AD");
   const [ldapHost, setLdapHost] = useState("");
+  const [ldapPort, setLdapPort] = useState("389");
+  const [ldapUseTls, setLdapUseTls] = useState(false);
   const [ldapBaseDn, setLdapBaseDn] = useState("");
   const [ldapFilter, setLdapFilter] = useState(
-    "(&(objectClass=user)(sAMAccountName={username}))",
+    "(&(objectClass=inetOrgPerson)(uid={username}))",
   );
   const [ldapBindDn, setLdapBindDn] = useState("");
   const [ldapBindPassword, setLdapBindPassword] = useState("");
@@ -110,6 +114,19 @@ export function IdentitySettingsPanel() {
     },
     onError: (err) => {
       setError(err instanceof ApiError ? err.message : "Provider save failed");
+    },
+  });
+
+  const deleteProvider = useMutation({
+    mutationFn: (id: string) =>
+      api(`/identity/providers/${id}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      setMessage("Provider removed.");
+      setError(null);
+      await qc.invalidateQueries({ queryKey: ["identity", "providers"] });
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : "Could not remove provider");
     },
   });
 
@@ -185,12 +202,27 @@ export function IdentitySettingsPanel() {
 
         <div className="mt-6 border-t border-border pt-4">
           <h3 className="text-sm font-semibold text-ink">Configured providers</h3>
-          <ul className="mt-2 space-y-1 text-xs text-ink-2">
+          <ul className="mt-2 space-y-2 text-xs text-ink-2">
             {(providersQuery.data ?? []).map((p) => (
-              <li key={p.id} className="font-mono">
-                {p.type} · {p.name} · {p.enabled ? "enabled" : "disabled"}
-                {p.issuer ? ` · ${p.issuer}` : ""}
-                {p.ldapHost ? ` · ${p.ldapHost}` : ""}
+              <li key={p.id} className="flex items-start justify-between gap-3">
+                <span className="font-mono">
+                  {p.type} · {p.name} · {p.enabled ? "enabled" : "disabled"}
+                  {p.issuer ? ` · ${p.issuer}` : ""}
+                  {p.ldapHost
+                    ? ` · ${p.ldapHost}:${p.ldapPort ?? "?"}${p.ldapUseTls ? " (LDAPS)" : " (LDAP)"}`
+                    : ""}
+                </span>
+                <Can perm={PERMISSIONS.IDENTITY_UPDATE}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={deleteProvider.isPending}
+                    onClick={() => deleteProvider.mutate(p.id)}
+                  >
+                    Remove
+                  </Button>
+                </Can>
               </li>
             ))}
             {(providersQuery.data ?? []).length === 0 ? (
@@ -272,10 +304,26 @@ export function IdentitySettingsPanel() {
               <Field label="Host" htmlFor="ldap-host">
                 <Input
                   id="ldap-host"
+                  placeholder="localhost"
                   value={ldapHost}
                   onChange={(e) => setLdapHost(e.target.value)}
                 />
               </Field>
+              <Field label="Port" htmlFor="ldap-port">
+                <Input
+                  id="ldap-port"
+                  value={ldapPort}
+                  onChange={(e) => setLdapPort(e.target.value)}
+                />
+              </Field>
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={ldapUseTls}
+                  onChange={(e) => setLdapUseTls(e.target.checked)}
+                />
+                Use LDAPS (TLS) — uncheck for local OpenLDAP on port 389
+              </label>
               <Field label="Base DN" htmlFor="ldap-base">
                 <Input
                   id="ldap-base"
@@ -315,8 +363,8 @@ export function IdentitySettingsPanel() {
                     name: ldapName,
                     enabled: true,
                     ldapHost,
-                    ldapPort: 636,
-                    ldapUseTls: true,
+                    ldapPort: Number.parseInt(ldapPort, 10) || 389,
+                    ldapUseTls,
                     ldapBaseDn,
                     ldapUserFilter: ldapFilter,
                     ldapBindDn,
