@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
@@ -20,13 +19,9 @@ const ROWS = [
 
 export function PreferencesPanel({ open, onClose }: PreferencesPanelProps) {
   const { data, isPending, mutation } = useNotificationPreferences(open);
-  const [saved, setSaved] = useState(false);
 
   const toggle = (key: "email" | "inApp" | "slack") => {
-    setSaved(false);
     mutation.mutate({ [key]: !data?.[key] });
-    // The optimistic set flips the toggle immediately; save feedback follows.
-    window.setTimeout(() => setSaved(true), 300);
   };
 
   return (
@@ -88,10 +83,15 @@ export function PreferencesPanel({ open, onClose }: PreferencesPanelProps) {
           })}
           <p className="text-xs leading-relaxed text-ink-3">
             All channels fall back to the in-app feed when disabled elsewhere.
-            {saved ? (
+            {mutation.isSuccess ? (
               <span className="ml-1 font-medium text-pass">Saved.</span>
             ) : null}
           </p>
+          {mutation.isError ? (
+            <p role="alert" className="text-xs text-fail">
+              Could not save notification preferences. Please try again.
+            </p>
+          ) : null}
         </div>
       )}
     </Dialog>

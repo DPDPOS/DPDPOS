@@ -112,6 +112,9 @@ export function AuditView() {
   useEffect(() => () => setCopiedId(null), []);
 
   const filterDirty = JSON.stringify(filters) !== JSON.stringify(applied);
+  const hasAppliedFilters = Object.values(applied).some(
+    (value) => value !== undefined && value !== "",
+  );
 
   return (
     <div className="space-y-4">
@@ -215,7 +218,7 @@ export function AuditView() {
             size="sm"
             variant="ghost"
             onClick={reset}
-            disabled={!filterDirty}
+            disabled={!filterDirty && !hasAppliedFilters}
           >
             <FilterX className="size-3.5" aria-hidden />
             Reset

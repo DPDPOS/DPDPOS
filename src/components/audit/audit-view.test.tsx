@@ -87,6 +87,22 @@ describe("AuditView (§9.12)", () => {
     expect(within(drawer).getByText("HIGH")).toBeInTheDocument();
   });
 
+  it("keeps Reset enabled after applying filters and restores the full stream", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AuditView />);
+    await screen.findByText("Violation Created");
+
+    await user.type(screen.getByLabelText("Entity type"), "EvidenceFile");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(await screen.findByText("Evidence Approved")).toBeInTheDocument();
+
+    const reset = screen.getByRole("button", { name: "Reset" });
+    expect(reset).toBeEnabled();
+    await user.click(reset);
+
+    expect(await screen.findByText("Violation Created")).toBeInTheDocument();
+  });
+
   it("loads more rows with cursor pagination and marks the end", async () => {
     const user = userEvent.setup();
     renderWithProviders(<AuditView />);

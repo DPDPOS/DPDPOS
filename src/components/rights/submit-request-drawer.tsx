@@ -20,6 +20,7 @@ import {
 } from "@/features/rights/schemas";
 import { useCreateRightsRequest } from "@/features/rights/hooks";
 import { useUsers } from "@/features/users/hooks";
+import { usePermission } from "@/hooks/use-permission";
 
 interface SubmitRequestDrawerProps {
   open: boolean;
@@ -30,7 +31,9 @@ export function SubmitRequestDrawer({
   open,
   onClose,
 }: SubmitRequestDrawerProps) {
-  const { data: users } = useUsers();
+  const hasPermission = usePermission();
+  const canReadUsers = hasPermission("user:read");
+  const { data: users } = useUsers(open && canReadUsers);
   const createMutation = useCreateRightsRequest();
 
   const {
@@ -120,28 +123,30 @@ export function SubmitRequestDrawer({
           />
         </Field>
 
-        <Field label="Assignee" htmlFor="rights-submit-assignee" hint="Optional for now.">
-          <Controller
-            control={control}
-            name="assignedTo"
-            render={({ field }) => (
-              <Select
-                id="rights-submit-assignee"
-                value={field.value ?? ""}
-                onChange={(event) =>
-                  field.onChange(event.target.value || undefined)
-                }
-              >
-                <option value="">Unassigned</option>
-                {(users?.items ?? []).map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </Select>
-            )}
-          />
-        </Field>
+        {canReadUsers ? (
+          <Field label="Assignee" htmlFor="rights-submit-assignee" hint="Optional for now.">
+            <Controller
+              control={control}
+              name="assignedTo"
+              render={({ field }) => (
+                <Select
+                  id="rights-submit-assignee"
+                  value={field.value ?? ""}
+                  onChange={(event) =>
+                    field.onChange(event.target.value || undefined)
+                  }
+                >
+                  <option value="">Unassigned</option>
+                  {(users?.items ?? []).map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            />
+          </Field>
+        ) : null}
 
         {createMutation.isError ? (
           <p role="alert" className="text-xs text-fail">

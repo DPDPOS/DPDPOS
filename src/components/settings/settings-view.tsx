@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/error-state";
@@ -21,9 +21,13 @@ import {
 } from "@/features/organizations/schemas";
 import { useOrganization, useUpdateOrganization } from "@/features/organizations/hooks";
 import { INDUSTRY_DOMAIN_OPTIONS } from "@/features/organizations/industry-domains";
+import type { UpdateOrganizationPayload } from "@/features/organizations/types";
 import { IdentitySettingsPanel } from "@/components/settings/identity-settings-panel";
 
 const MATURITY_OPTIONS = ["basic", "intermediate", "advanced"];
+const nullableOptionalField = {
+  setValueAs: (value: string) => (value === "" ? null : value),
+};
 
 export function SettingsView() {
   const organizationId = useSessionStore((state) => state.user?.organizationId ?? null);
@@ -37,14 +41,14 @@ export function SettingsView() {
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     reset,
     formState: { isDirty, errors },
   } = useForm<UpdateOrganizationFormValues>({
     resolver: zodResolver(updateOrganizationSchema),
   });
 
-  const isSdf = watch("isSignificantDataFiduciary") ?? false;
+  const isSdf = useWatch({ control, name: "isSignificantDataFiduciary" }) ?? false;
 
   // Hydrate the form when the org loads or changes.
   useEffect(() => {
@@ -83,7 +87,15 @@ export function SettingsView() {
   const onSubmit = handleSubmit(async (values) => {
     setSaved(false);
     try {
-      await updateMutation.mutateAsync({ id: org.id, body: values });
+      const body: UpdateOrganizationPayload = {
+        ...values,
+        industry: values.industry || null,
+        companySize: values.companySize || null,
+        operatingRegion: values.operatingRegion || null,
+        companyType: values.companyType || null,
+        maturityLevel: values.maturityLevel || null,
+      };
+      await updateMutation.mutateAsync({ id: org.id, body });
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
     } catch {
@@ -115,7 +127,7 @@ export function SettingsView() {
               <Input id="org-name" {...register("name")} maxLength={200} />
             </Field>
             <Field label="Industry" htmlFor="org-industry" error={errors.industry?.message}>
-              <Select id="org-industry" {...register("industry")}>
+              <Select id="org-industry" {...register("industry", nullableOptionalField)}>
                 <option value="">Select industry…</option>
                 {INDUSTRY_DOMAIN_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -129,7 +141,7 @@ export function SettingsView() {
                 id="org-size"
                 placeholder="e.g. 1–100"
                 maxLength={60}
-                {...register("companySize")}
+                {...register("companySize", nullableOptionalField)}
               />
             </Field>
             <Field
@@ -141,7 +153,7 @@ export function SettingsView() {
                 id="org-region"
                 placeholder="e.g. India"
                 maxLength={60}
-                {...register("operatingRegion")}
+                {...register("operatingRegion", nullableOptionalField)}
               />
             </Field>
             <Field label="Company type" htmlFor="org-type" error={errors.companyType?.message}>
@@ -149,11 +161,11 @@ export function SettingsView() {
                 id="org-type"
                 placeholder="e.g. private limited"
                 maxLength={60}
-                {...register("companyType")}
+                {...register("companyType", nullableOptionalField)}
               />
             </Field>
             <Field label="Maturity level" htmlFor="org-maturity" error={errors.maturityLevel?.message}>
-              <Select id="org-maturity" {...register("maturityLevel")}>
+              <Select id="org-maturity" {...register("maturityLevel", nullableOptionalField)}>
                 <option value="">Unset</option>
                 {MATURITY_OPTIONS.map((option) => (
                   <option key={option} value={option}>

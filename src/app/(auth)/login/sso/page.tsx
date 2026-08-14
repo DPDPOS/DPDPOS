@@ -13,14 +13,11 @@ import { useSessionStore } from "@/state/session";
 function SsoExchangeInner() {
   const router = useRouter();
   const params = useSearchParams();
+  const exchange = params.get("exchange");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const exchange = params.get("exchange");
-    if (!exchange) {
-      setError("Missing SSO exchange code.");
-      return;
-    }
+    if (!exchange) return;
 
     let cancelled = false;
     void (async () => {
@@ -44,11 +41,11 @@ function SsoExchangeInner() {
     return () => {
       cancelled = true;
     };
-  }, [params, router]);
+  }, [exchange, router]);
 
   return (
     <AuthShell title="Completing sign-in" description="Finishing directory authentication.">
-      {error ? <FormAlert message={error} /> : (
+       {!exchange ? <FormAlert message="Missing SSO exchange code." /> : error ? <FormAlert message={error} /> : (
         <p className="text-sm text-ink-2">Please wait…</p>
       )}
     </AuthShell>

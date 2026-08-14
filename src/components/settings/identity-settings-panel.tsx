@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api/errors";
 import { api } from "@/lib/api/client";
 import { Can } from "@/components/ui/can";
 import { PERMISSIONS } from "@/lib/constants/permissions";
+import { usePermission } from "@/hooks/use-permission";
 
 type IdentitySettings = {
   mode: string;
@@ -34,7 +35,17 @@ type IdentityProvider = {
   ldapUseTls: boolean | null;
 };
 
+type IdentitySettingsDraft = Pick<
+  IdentitySettings,
+  "mode" | "enforceSso" | "allowLocalBreakGlass" | "jitProvisioningEnabled"
+>;
+
 export function IdentitySettingsPanel() {
+  const hasPermission = usePermission();
+  return hasPermission(PERMISSIONS.IDENTITY_READ) ? <IdentitySettingsPanelContent /> : null;
+}
+
+function IdentitySettingsPanelContent() {
   const qc = useQueryClient();
   const settingsQuery = useQuery({
     queryKey: ["identity", "settings"],
@@ -45,10 +56,13 @@ export function IdentitySettingsPanel() {
     queryFn: () => api<IdentityProvider[]>("/identity/providers"),
   });
 
-  const [mode, setMode] = useState("LOCAL");
-  const [enforceSso, setEnforceSso] = useState(false);
-  const [allowBreakGlass, setAllowBreakGlass] = useState(true);
-  const [jit, setJit] = useState(false);
+  const [settingsDraft, setSettingsDraft] = useState<Partial<IdentitySettingsDraft>>({});
+  const mode = settingsDraft.mode ?? settingsQuery.data?.mode ?? "LOCAL";
+  const enforceSso = settingsDraft.enforceSso ?? settingsQuery.data?.enforceSso ?? false;
+  const allowBreakGlass =
+    settingsDraft.allowLocalBreakGlass ?? settingsQuery.data?.allowLocalBreakGlass ?? true;
+  const jit =
+    settingsDraft.jitProvisioningEnabled ?? settingsQuery.data?.jitProvisioningEnabled ?? false;
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,15 +84,6 @@ export function IdentitySettingsPanel() {
   );
   const [ldapBindDn, setLdapBindDn] = useState("");
   const [ldapBindPassword, setLdapBindPassword] = useState("");
-
-  useEffect(() => {
-    const s = settingsQuery.data;
-    if (!s) return;
-    setMode(s.mode);
-    setEnforceSso(s.enforceSso);
-    setAllowBreakGlass(s.allowLocalBreakGlass);
-    setJit(s.jitProvisioningEnabled);
-  }, [settingsQuery.data]);
 
   const saveSettings = useMutation({
     mutationFn: () =>
@@ -131,8 +136,7 @@ export function IdentitySettingsPanel() {
   });
 
   return (
-    <Can perm={PERMISSIONS.IDENTITY_READ}>
-      <section className="rounded-md border border-border bg-surface p-5">
+    <section className="rounded-md border border-border bg-surface p-5">
         <div className="mb-4">
           <h2 className="text-sm font-semibold text-ink">Directory identity</h2>
           <p className="mt-0.5 text-xs text-ink-2">
@@ -149,7 +153,9 @@ export function IdentitySettingsPanel() {
             <Select
               id="id-mode"
               value={mode}
-              onChange={(e) => setMode(e.target.value)}
+              onChange={(e) =>
+                setSettingsDraft((current) => ({ ...current, mode: e.target.value }))
+              }
             >
               <option value="LOCAL">LOCAL</option>
               <option value="OIDC_ENTRA">OIDC_ENTRA (Entra / 365)</option>
@@ -165,7 +171,9 @@ export function IdentitySettingsPanel() {
             <input
               type="checkbox"
               checked={enforceSso}
-              onChange={(e) => setEnforceSso(e.target.checked)}
+              onChange={(e) =>
+                setSettingsDraft((current) => ({ ...current, enforceSso: e.target.checked }))
+              }
             />
             Enforce SSO (block normal password login except break-glass)
           </label>
@@ -173,7 +181,12 @@ export function IdentitySettingsPanel() {
             <input
               type="checkbox"
               checked={allowBreakGlass}
-              onChange={(e) => setAllowBreakGlass(e.target.checked)}
+              onChange={(e) =>
+                setSettingsDraft((current) => ({
+                  ...current,
+                  allowLocalBreakGlass: e.target.checked,
+                }))
+              }
             />
             Allow local break-glass admin password
           </label>
@@ -181,7 +194,12 @@ export function IdentitySettingsPanel() {
             <input
               type="checkbox"
               checked={jit}
-              onChange={(e) => setJit(e.target.checked)}
+              onChange={(e) =>
+                setSettingsDraft((current) => ({
+                  ...current,
+                  jitProvisioningEnabled: e.target.checked,
+                }))
+              }
             />
             JIT provision users on first directory login
           </label>
@@ -377,7 +395,6 @@ export function IdentitySettingsPanel() {
             </div>
           </div>
         </Can>
-      </section>
-    </Can>
+    </section>
   );
 }
