@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionStore } from "@/state/session";
 import { renderWithProviders } from "@/test/render";
-import { adminUser, resetTestFixtures } from "@/test/msw/fixtures";
+import { adminUser, organizationRow, resetTestFixtures } from "@/test/msw/fixtures";
 import { SettingsView } from "./settings-view";
 
 vi.mock("next/navigation", () => ({
@@ -75,6 +75,18 @@ describe("SettingsView (§9.14)", () => {
     expect(
       await screen.findByText("Saved"),
     ).toBeInTheDocument();
+  });
+
+  it("submits cleared optional profile fields as null", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsView />);
+    await screen.findByLabelText("Industry");
+
+    await user.selectOptions(screen.getByLabelText("Industry"), "");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await screen.findByText("Saved");
+    expect(organizationRow.industry).toBeNull();
   });
 
   it("shows the SDF consequence before the flag can change the framework", async () => {

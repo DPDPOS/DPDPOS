@@ -214,4 +214,20 @@ describe("RightsView (§9.6)", () => {
       await within(table).findByText("DS-2026-TEST-1"),
     ).toBeInTheDocument();
   });
+
+  it("hides assignee selection when the user directory is not readable", async () => {
+    const user = userEvent.setup();
+    useSessionStore.setState({
+      user: {
+        ...adminUser,
+        permissions: adminUser.permissions.filter((permission) => permission !== "user:read"),
+      },
+    });
+    renderWithProviders(<RightsView />);
+    await screen.findByRole("table");
+
+    await user.click(screen.getByRole("button", { name: "Submit request" }));
+    const drawer = screen.getByRole("dialog", { name: "Submit rights request" });
+    expect(within(drawer).queryByLabelText("Assignee")).not.toBeInTheDocument();
+  });
 });

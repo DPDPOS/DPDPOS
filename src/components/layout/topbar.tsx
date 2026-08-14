@@ -1,6 +1,5 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   CheckCheck,
@@ -19,13 +18,12 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { useLogout } from "@/features/auth/hooks";
 import {
+  useMarkAllNotificationsRead,
   useMarkNotificationRead,
   useNotificationsPage,
   useUnreadCount,
 } from "@/features/notifications/hooks";
-import { notificationsApi } from "@/features/notifications/api";
 import { formatDateTime } from "@/lib/utils/format";
-import { queryKeys } from "@/lib/api/queryKeys";
 import {
   accessibleRoutes,
   CURRENT_PHASE,
@@ -396,17 +394,16 @@ function NotificationPanel({
   enabled: boolean;
   onNavigate: () => void;
 }) {
-  const queryClient = useQueryClient();
   const { data } = useUnreadCount(enabled);
   const { data: inbox, isFetching } = useNotificationsPage(1, 5, {}, enabled);
   const markRead = useMarkNotificationRead();
+  const markAllReadMutation = useMarkAllNotificationsRead();
   const count = enabled ? data?.count ?? 0 : 0;
 
   const markAllRead = async () => {
     if (!enabled || count === 0) return;
     try {
-      await notificationsApi.markAllRead();
-      await queryClient.invalidateQueries({ queryKey: queryKeys.unreadCount });
+      await markAllReadMutation.mutateAsync();
     } catch {
       // Non-fatal — the dot simply stays.
     }
@@ -419,7 +416,7 @@ function NotificationPanel({
         <button
           type="button"
           onClick={() => void markAllRead()}
-          disabled={!enabled || count === 0 || isFetching}
+          disabled={!enabled || count === 0 || isFetching || markAllReadMutation.isPending}
           className="focus-ring flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
         >
           <CheckCheck className="size-3" aria-hidden />

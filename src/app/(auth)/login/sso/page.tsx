@@ -7,9 +7,9 @@ import { FormAlert } from "@/features/auth/components/form-alert";
 import { RequireGuest } from "@/features/auth/components/require-guest";
 import { authApi } from "@/features/auth/api";
 import { authErrorMessage } from "@/features/auth/error-utils";
+import type { LoginSuccessResult } from "@/features/auth/types";
 import { ApiError } from "@/lib/api/errors";
 import { useSessionStore } from "@/state/session";
-import type { LoginSuccessResult } from "@/features/auth/types";
 
 /**
  * One-time exchange codes: share a single in-flight request across Strict Mode
@@ -31,11 +31,11 @@ function exchangeOnce(code: string): Promise<LoginSuccessResult> {
 function SsoExchangeInner() {
   const router = useRouter();
   const params = useSearchParams();
+  const exchange = params.get("exchange");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
 
   useEffect(() => {
-    const exchange = params.get("exchange");
     if (!exchange) {
       setBusy(false);
       setError("Missing SSO exchange code.");
@@ -67,7 +67,7 @@ function SsoExchangeInner() {
     return () => {
       alive = false;
     };
-  }, [params, router]);
+  }, [exchange, router]);
 
   return (
     <AuthShell title="Completing sign-in" description="Finishing directory authentication.">

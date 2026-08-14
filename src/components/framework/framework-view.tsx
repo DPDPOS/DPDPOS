@@ -73,10 +73,12 @@ export function FrameworkView() {
               title="No compliance programme yet"
               body="Answer a few profile questions and the system generates a DPDP Act-based control set with a phased roadmap. Nothing to configure by hand."
               action={
-                <Button onClick={() => setWizardOpen(true)}>
-                  Build your framework
-                  <ArrowUpRight className="size-3.5" aria-hidden />
-                </Button>
+                <Can perm="framework:generate">
+                  <Button onClick={() => setWizardOpen(true)}>
+                    Build your framework
+                    <ArrowUpRight className="size-3.5" aria-hidden />
+                  </Button>
+                </Can>
               }
             />
           </Card>

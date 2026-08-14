@@ -47,11 +47,11 @@ describe("RolesView (§9.14)", () => {
     expect(within(table).getByText("Privacy Analyst")).toBeInTheDocument();
 
     const body = table.querySelector("tbody") as HTMLElement;
-    // ORG_ADMIN holds the full 60-permission catalog.
+    // ORG_ADMIN holds the full 68-permission catalog.
     const adminRow = within(body)
       .getByText("ORG_ADMIN")
       .closest("tr") as HTMLElement;
-    expect(within(adminRow).getByText("60")).toBeInTheDocument();
+    expect(within(adminRow).getByText("68")).toBeInTheDocument();
     // Members come from the users directory (Arjun + Priya have roles).
     const dpoRow = within(body).getByText("DPO").closest("tr") as HTMLElement;
     expect(within(dpoRow).getByText("1")).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe("RolesView (§9.14)", () => {
     const drawer = await screen.findByRole("dialog", { name: "Role permissions" });
     // The custom role's seeded subset is shown.
     expect(
-      within(drawer).getByText(/of 60 permissions/),
+      within(drawer).getByText(/of 68 permissions/),
     ).toBeInTheDocument();
 
     // Toggle one permission, then save — the drawer closes on success.

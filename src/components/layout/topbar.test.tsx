@@ -80,6 +80,19 @@ describe("Topbar", () => {
     expect(screen.getByLabelText("Notifications")).toBeInTheDocument();
   });
 
+  it("refreshes the open notification list after marking all notifications read", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Topbar />);
+    await user.click(await screen.findByLabelText("Notifications (4 unread)"));
+    await screen.findByText("New Violation: Retention gap in HR data");
+
+    await user.click(screen.getByRole("button", { name: "Mark all read" }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Read" })).not.toBeInTheDocument();
+    });
+  });
+
   it("opens the user menu with session identity", async () => {
     const user = userEvent.setup();
     renderWithProviders(<Topbar />);

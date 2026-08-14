@@ -19,7 +19,7 @@ interface PermissionEditorProps {
 }
 
 /**
- * Grouped permission tree over the frozen 60-string catalog. Each group has a
+ * Grouped permission tree over the frozen 68-string catalog. Each group has a
  * select-all; a search box filters the tree; a live count is always visible.
  */
 export function PermissionEditor({

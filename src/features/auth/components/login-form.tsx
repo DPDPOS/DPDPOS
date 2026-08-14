@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,10 @@ export function LoginForm() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
-  const [identity, setIdentity] = useState<IdentityOptions | null>(null);
+  const [identity, setIdentity] = useState<{
+    organizationId: string;
+    options: IdentityOptions | null;
+  } | null>(null);
   const [ldapMode, setLdapMode] = useState(false);
   const [ldapUsername, setLdapUsername] = useState("");
   const [ldapPassword, setLdapPassword] = useState("");
@@ -33,19 +36,21 @@ export function LoginForm() {
     handleSubmit,
     setError,
     setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { organizationId: "", email: "", password: "" },
   });
 
-  const organizationId = watch("organizationId");
+  const organizationId = useWatch({ control, name: "organizationId" });
+  const normalizedOrganizationId = organizationId?.trim() ?? "";
+  const activeIdentity =
+    identity?.organizationId === normalizedOrganizationId ? identity.options : null;
 
   useEffect(() => {
-    const id = organizationId?.trim();
+    const id = normalizedOrganizationId;
     if (!id || id.length < 36) {
-      setIdentity(null);
       return;
     }
     let cancelled = false;
@@ -53,20 +58,20 @@ export function LoginForm() {
       void authApi
         .identityOptions(id)
         .then((opts) => {
-          if (!cancelled) setIdentity(opts);
+          if (!cancelled) setIdentity({ organizationId: id, options: opts });
         })
         .catch(() => {
-          if (!cancelled) setIdentity(null);
+          if (!cancelled) setIdentity({ organizationId: id, options: null });
         });
     }, 300);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [organizationId]);
+  }, [normalizedOrganizationId]);
 
   const hidePassword =
-    Boolean(identity?.enforceSso) && !identity?.allowLocalBreakGlass;
+    Boolean(activeIdentity?.enforceSso) && !activeIdentity?.allowLocalBreakGlass;
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitting(true);
@@ -158,7 +163,7 @@ export function LoginForm() {
         />
       </Field>
 
-      {identity?.oidcEnabled ? (
+      {activeIdentity?.oidcEnabled ? (
         <div className="space-y-2 rounded-md border border-border bg-surface-2/50 p-3">
           <p className="text-xs text-ink-2">
             This organization accepts Microsoft Entra / 365 sign-in.
@@ -175,7 +180,7 @@ export function LoginForm() {
         </div>
       ) : null}
 
-      {identity?.ldapEnabled ? (
+      {activeIdentity?.ldapEnabled ? (
         <div className="space-y-2">
           <Button
             type="button"
@@ -219,7 +224,7 @@ export function LoginForm() {
 
       {!hidePassword ? (
         <>
-          {(identity?.oidcEnabled || identity?.ldapEnabled) && (
+          {(activeIdentity?.oidcEnabled || activeIdentity?.ldapEnabled) && (
             <p className="text-center text-xs uppercase tracking-wide text-ink-3">
               or password
             </p>
