@@ -9,30 +9,53 @@ import { authApi } from "@/features/auth/api";
 import { authErrorMessage } from "@/features/auth/error-utils";
 import { ApiError } from "@/lib/api/errors";
 import { useSessionStore } from "@/state/session";
+import type { LoginSuccessResult } from "@/features/auth/types";
+
+/**
+ * One-time exchange codes: share a single in-flight request across Strict Mode
+ * remounts so the first call is not abandoned after Redis deletes the code.
+ */
+const exchangeInflight = new Map<string, Promise<LoginSuccessResult>>();
+
+function exchangeOnce(code: string): Promise<LoginSuccessResult> {
+  const existing = exchangeInflight.get(code);
+  if (existing) return existing;
+  const promise = authApi.oidcExchange(code).finally(() => {
+    // Keep failed entries briefly so a remount does not hammer Redis with a dead code.
+    window.setTimeout(() => exchangeInflight.delete(code), 5_000);
+  });
+  exchangeInflight.set(code, promise);
+  return promise;
+}
 
 function SsoExchangeInner() {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(true);
 
   useEffect(() => {
     const exchange = params.get("exchange");
     if (!exchange) {
+      setBusy(false);
       setError("Missing SSO exchange code.");
       return;
     }
 
-    let cancelled = false;
+    let alive = true;
     void (async () => {
       try {
-        const result = await authApi.oidcExchange(exchange);
-        if (cancelled) return;
+        const result = await exchangeOnce(exchange);
         useSessionStore.getState().markAuthenticated(result.tokens, result.user);
-        router.replace(
-          result.mfaEnrollmentRequired ? "/mfa?step=enroll" : "/dashboard",
-        );
+        const next = result.mfaEnrollmentRequired ? "/mfa?step=enroll" : "/dashboard";
+        router.replace(next);
       } catch (err) {
-        if (cancelled) return;
+        if (!alive) return;
+        if (useSessionStore.getState().status === "authenticated") {
+          router.replace("/dashboard");
+          return;
+        }
+        setBusy(false);
         if (err instanceof ApiError) {
           setError(authErrorMessage(err));
         } else {
@@ -42,14 +65,27 @@ function SsoExchangeInner() {
     })();
 
     return () => {
-      cancelled = true;
+      alive = false;
     };
   }, [params, router]);
 
   return (
     <AuthShell title="Completing sign-in" description="Finishing directory authentication.">
-      {error ? <FormAlert message={error} /> : (
-        <p className="text-sm text-ink-2">Please wait…</p>
+      {error ? (
+        <div className="space-y-3">
+          <FormAlert message={error} />
+          <p className="text-xs text-ink-2">
+            Close this tab and start again from{" "}
+            <a className="underline" href="/login">
+              Sign in
+            </a>
+            . Do not refresh this page — the Microsoft handoff code works only once.
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-ink-2">
+          {busy ? "Please wait…" : "Redirecting…"}
+        </p>
       )}
     </AuthShell>
   );
