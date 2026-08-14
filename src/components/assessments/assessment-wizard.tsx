@@ -705,7 +705,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
           {currentStep.id === "questionnaire" ? (
             <div className="space-y-5">
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-[12px] text-ink-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink-3">
                   <span>
                     {currentStage
                       ? `Stage ${stageNumber}/${stages.length}: ${currentStage.stageLabel}`
@@ -716,6 +716,19 @@ export function AssessmentWizard({ assessmentId }: Props) {
                     {progressPct}%
                   </span>
                 </div>
+                {catalog?.industryDomainLabel ? (
+                  <p className="rounded-sm border border-border bg-surface-2 px-3 py-2 text-[12px] text-ink-2">
+                    Industry pack:{" "}
+                    <span className="font-medium text-ink">
+                      {catalog.industryDomainLabel}
+                    </span>
+                    . Core DPDP questions plus sector-specific context.
+                  </p>
+                ) : catalog?.industryHint ? (
+                  <p className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-ink-2">
+                    {catalog.industryHint}
+                  </p>
+                ) : null}
                 <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
                   <div
                     className="h-full bg-accent transition-all"

@@ -20,6 +20,8 @@ import {
   type UpdateOrganizationFormValues,
 } from "@/features/organizations/schemas";
 import { useOrganization, useUpdateOrganization } from "@/features/organizations/hooks";
+import { INDUSTRY_DOMAIN_OPTIONS } from "@/features/organizations/industry-domains";
+import { IdentitySettingsPanel } from "@/components/settings/identity-settings-panel";
 
 const MATURITY_OPTIONS = ["basic", "intermediate", "advanced"];
 
@@ -113,12 +115,14 @@ export function SettingsView() {
               <Input id="org-name" {...register("name")} maxLength={200} />
             </Field>
             <Field label="Industry" htmlFor="org-industry" error={errors.industry?.message}>
-              <Input
-                id="org-industry"
-                placeholder="e.g. healthcare"
-                maxLength={120}
-                {...register("industry")}
-              />
+              <Select id="org-industry" {...register("industry")}>
+                <option value="">Select industry…</option>
+                {INDUSTRY_DOMAIN_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field label="Company size" htmlFor="org-size" error={errors.companySize?.message}>
               <Input
@@ -205,6 +209,8 @@ export function SettingsView() {
           </footer>
         </form>
       </section>
+
+      <IdentitySettingsPanel />
 
       {/* Session & security */}
       <section className="rounded-md border border-border bg-surface p-5">

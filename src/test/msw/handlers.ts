@@ -57,6 +57,21 @@ export const handlers = [
   ),
 
   // ---- Auth ----------------------------------------------------------------
+  http.get("/api/auth/identity/options", () =>
+    HttpResponse.json({
+      success: true,
+      data: {
+        mode: "LOCAL",
+        enforceSso: false,
+        allowLocalBreakGlass: true,
+        oidcEnabled: false,
+        ldapEnabled: false,
+        samlEnabled: false,
+        providers: [],
+      },
+    }),
+  ),
+
   http.post("/api/auth/login", async ({ request }) => {
     const body = (await request.json()) as {
       organizationId: string;
@@ -268,12 +283,10 @@ export const handlers = [
       success: true,
       data: filtered.slice((page - 1) * pageSize, page * pageSize),
       meta: {
-        pagination: {
-          page,
-          pageSize,
-          total: filtered.length,
-          totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
-        },
+        page,
+        pageSize,
+        total: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
       },
     });
   }),
@@ -322,12 +335,10 @@ export const handlers = [
       success: true,
       data: filtered.slice((page - 1) * pageSize, page * pageSize),
       meta: {
-        pagination: {
-          page,
-          pageSize,
-          total: filtered.length,
-          totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
-        },
+        page,
+        pageSize,
+        total: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
       },
     });
   }),
@@ -899,7 +910,8 @@ export const handlers = [
   }),
 
   // ---- Reports ----------------------------------------------------------------
-    http.get("/api/reports", ({ request }) => {
+  // Same paged-inside-data oddity as evidence — no `meta` in the envelope.
+  http.get("/api/reports", ({ request }) => {
     const url = new URL(request.url);
     const reportType = url.searchParams.get("reportType");
     const status = url.searchParams.get("status");
@@ -911,15 +923,7 @@ export const handlers = [
     const items = rows.slice((page - 1) * pageSize, page * pageSize);
     return HttpResponse.json({
       success: true,
-      data: items,
-      meta: {
-        pagination: {
-          page,
-          pageSize,
-          total: rows.length,
-          totalPages: Math.max(1, Math.ceil(rows.length / pageSize)),
-        },
-      },
+      data: { data: items, total: rows.length, page, pageSize },
     });
   }),
 
@@ -1006,12 +1010,10 @@ export const handlers = [
       success: true,
       data: sliced,
       meta: {
-        pagination: {
-          page,
-          pageSize,
-          total: departmentRows.length,
-          totalPages: Math.max(1, Math.ceil(departmentRows.length / pageSize)),
-        },
+        page,
+        pageSize,
+        total: departmentRows.length,
+        totalPages: Math.max(1, Math.ceil(departmentRows.length / pageSize)),
       },
     });
   }),
@@ -1058,12 +1060,10 @@ export const handlers = [
       success: true,
       data: sliced,
       meta: {
-        pagination: {
-          page,
-          pageSize,
-          total: filtered.length,
-          totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
-        },
+        page,
+        pageSize,
+        total: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
       },
     });
   }),
@@ -1124,12 +1124,10 @@ export const handlers = [
       success: true,
       data: sliced,
       meta: {
-        pagination: {
-          page,
-          pageSize,
-          total: roleRows.length,
-          totalPages: Math.max(1, Math.ceil(roleRows.length / pageSize)),
-        },
+        page,
+        pageSize,
+        total: roleRows.length,
+        totalPages: Math.max(1, Math.ceil(roleRows.length / pageSize)),
       },
     });
   }),
@@ -1222,7 +1220,9 @@ export const handlers = [
   }),
 
   // ---- Notifications -------------------------------------------------------
-    http.get("/api/notifications", ({ request }) => {
+  // The backend list returns `{ items, pagination }` *inside* data — Variant C
+  // of the apiClient list normalizer; the handler mirrors that oddity.
+  http.get("/api/notifications", ({ request }) => {
     const url = new URL(request.url);
     const page = Number(url.searchParams.get("page") ?? 1);
     const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
@@ -1236,8 +1236,8 @@ export const handlers = [
     const sliced = filtered.slice((page - 1) * pageSize, page * pageSize);
     return HttpResponse.json({
       success: true,
-      data: sliced,
-      meta: {
+      data: {
+        items: sliced,
         pagination: {
           page,
           pageSize,

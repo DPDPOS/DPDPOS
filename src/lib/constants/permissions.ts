@@ -94,6 +94,11 @@ export const PERMISSIONS = {
   ASSESSMENT_UPDATE: "assessment:update",
   ASSESSMENT_EVALUATE: "assessment:evaluate",
   ASSESSMENT_CLI_TOKEN: "assessment:cli_token",
+
+  // identity / directory federation
+  IDENTITY_READ: "identity:read",
+  IDENTITY_UPDATE: "identity:update",
+  IDENTITY_SYNC: "identity:sync",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -158,6 +163,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       PERMISSIONS.ASSESSMENT_UPDATE,
       PERMISSIONS.ASSESSMENT_EVALUATE,
       PERMISSIONS.ASSESSMENT_CLI_TOKEN,
+    ],
+  },
+  {
+    id: "identity",
+    label: "Directory identity",
+    permissions: [
+      PERMISSIONS.IDENTITY_READ,
+      PERMISSIONS.IDENTITY_UPDATE,
+      PERMISSIONS.IDENTITY_SYNC,
     ],
   },
   {

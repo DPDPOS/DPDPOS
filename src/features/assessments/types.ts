@@ -78,6 +78,7 @@ export interface QuestionnaireQuestion {
   options?: string[];
   required?: boolean;
   showIf?: { code: string; equals: string | boolean };
+  industryDomain?: string;
 }
 
 export interface QuestionnaireStage {
@@ -92,10 +93,19 @@ export interface DocumentTypeOption {
   label: string;
 }
 
+export interface IndustryDomainOption {
+  value: string;
+  label: string;
+}
+
 export interface QuestionnaireCatalog {
   questions: QuestionnaireQuestion[];
   stages: QuestionnaireStage[];
   documentTypes: DocumentTypeOption[];
+  industryDomain?: string | null;
+  industryDomainLabel?: string | null;
+  industryHint?: string | null;
+  industryOptions?: IndustryDomainOption[];
 }
 
 export interface QuestionnaireAnswer {

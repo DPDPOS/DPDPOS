@@ -61,4 +61,32 @@ export const authApi = {
     }),
 
   me: () => api<AuthMeResponse>("/auth/me"),
+
+  identityOptions: (organizationId: string) =>
+    api<{
+      mode: string;
+      enforceSso: boolean;
+      allowLocalBreakGlass: boolean;
+      oidcEnabled: boolean;
+      ldapEnabled: boolean;
+      samlEnabled: boolean;
+      providers: Array<{ id: string; type: string; name: string }>;
+    }>(`/auth/identity/options?organizationId=${encodeURIComponent(organizationId)}`),
+
+  oidcStart: (organizationId: string) =>
+    api<{ authorizationUrl: string }>(
+      `/auth/oidc/start?organizationId=${encodeURIComponent(organizationId)}`,
+    ),
+
+  oidcExchange: (exchangeCode: string) =>
+    api<LoginSuccessResult>("/auth/oidc/exchange", {
+      method: "POST",
+      body: { exchangeCode },
+    }),
+
+  ldapLogin: (input: {
+    organizationId: string;
+    username: string;
+    password: string;
+  }) => api<LoginSuccessResult>("/auth/ldap/login", { method: "POST", body: input }),
 };

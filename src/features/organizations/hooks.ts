@@ -21,6 +21,9 @@ export function useUpdateOrganization() {
       organizationsApi.update(id, body),
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.organization(id) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.assessmentQuestionnaireCatalog,
+      });
     },
   });
 }

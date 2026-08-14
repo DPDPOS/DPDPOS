@@ -89,11 +89,15 @@ const BACKEND_CATALOG = [
   "assessment:update",
   "assessment:evaluate",
   "assessment:cli_token",
+  // identity / directory federation
+  "identity:read",
+  "identity:update",
+  "identity:sync",
 ];
 
 describe("permission catalog mirror (§9.14)", () => {
-  it("contains exactly the 65 backend permission strings", () => {
-    expect(BACKEND_CATALOG).toHaveLength(65);
+  it("contains exactly the 68 backend permission strings", () => {
+    expect(BACKEND_CATALOG).toHaveLength(68);
     expect([...ALL_PERMISSIONS].sort()).toEqual([...BACKEND_CATALOG].sort());
   });
 
