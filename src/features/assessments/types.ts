@@ -131,6 +131,8 @@ export interface CliTokenResponse {
     configure: string;
     scan: string;
     submit: string;
+    /** Present when the API returns npm install guidance. */
+    install?: string;
   };
 }
 

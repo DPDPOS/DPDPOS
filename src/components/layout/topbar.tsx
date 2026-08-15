@@ -307,16 +307,6 @@ export function Topbar() {
                     {user?.permissions.length ?? 0}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    close();
-                    router.push("/gallery");
-                  }}
-                  className="focus-ring w-full rounded-sm px-2.5 py-1.5 text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
-                >
-                  Component gallery
-                </button>
               </div>
               <div className="border-t border-border p-1.5">
                 <button

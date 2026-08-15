@@ -109,10 +109,9 @@ describe("Sidebar", () => {
     expect(screen.queryByText("Programme")).not.toBeInTheDocument();
     expect(screen.queryByText("Controls")).not.toBeInTheDocument();
     expect(screen.queryByText("System")).not.toBeInTheDocument();
-    // The gallery stays reachable from the footer.
     expect(
-      screen.getByRole("link", { name: "Component gallery" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("link", { name: "Component gallery" }),
+    ).not.toBeInTheDocument();
   });
 
   it("collapses to icons with tooltips instead of labels", () => {

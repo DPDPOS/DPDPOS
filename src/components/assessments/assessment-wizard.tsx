@@ -65,8 +65,8 @@ const STEPS: Array<{
   {
     id: "cli",
     label: "CLI scan",
-    title: "Mint a CLI token and submit scan evidence",
-    hint: "Strongly recommended. Without CLI findings, readiness score is capped at 55.",
+    title: "Install the npm CLI, mint a token, and submit scan evidence",
+    hint: "Strongly recommended. Install dpdp-cli from npm, then scan your codebase. Without CLI findings, readiness score is capped at 55.",
   },
   {
     id: "evaluate",
@@ -311,12 +311,16 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const commandBlock = useMemo(() => {
     if (!minted) return "";
     return [
+      "# Install once (requires Node.js 20+)",
+      minted.instructions.install ?? "npm install -g dpdp-cli",
+      "",
+      "# Authenticate and run against this assessment",
       minted.instructions.login,
       minted.instructions.configure,
-      "npx tsx src/index.ts scan ./fixtures/sample-app",
-      "npx tsx src/index.ts evidence",
-      "npx tsx src/index.ts submit",
-      "npx tsx src/index.ts status",
+      minted.instructions.scan ?? "dpdp scan ./path-to-your-code",
+      "dpdp evidence",
+      minted.instructions.submit ?? "dpdp submit",
+      "dpdp status",
     ].join("\n");
   }, [minted]);
 
@@ -931,6 +935,17 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 <div className="space-y-3 rounded-sm border border-accent/30 bg-accent-soft p-4 sm:p-5">
                   <p className="text-[13px] font-medium text-ink">
                     Copy now — the raw token is shown only once.
+                  </p>
+                  <p className="text-[12px] text-ink-2">
+                    The scanner ships as the npm package{" "}
+                    <code className="rounded-sm bg-surface px-1 font-mono text-[11px]">
+                      dpdp-cli
+                    </code>
+                    . Install it globally (or use{" "}
+                    <code className="rounded-sm bg-surface px-1 font-mono text-[11px]">
+                      npx -p dpdp-cli dpdp …
+                    </code>
+                    ), then run the commands below against the codebase you are assessing.
                   </p>
                   <code className="block break-all rounded-sm bg-surface px-3 py-2 font-mono text-[12px] text-ink">
                     {minted.token}

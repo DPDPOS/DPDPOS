@@ -516,14 +516,6 @@ function ReducedDashboard({
                 {(user?.permissions ?? []).length}
               </span>
             </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button variant="secondary" size="sm" asChild>
-                <Link href="/gallery">
-                  <ArrowUpRight className="size-3.5" aria-hidden />
-                  Component gallery
-                </Link>
-              </Button>
-            </div>
           </CardBody>
         </Card>
       </div>

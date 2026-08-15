@@ -1,6 +1,6 @@
 "use client";
 
-import { Frame, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -127,22 +127,8 @@ export function Sidebar() {
 
         {/* Footer ---------------------------------------------------------------- */}
         <div className="shrink-0 border-t border-border p-2">
-          <NavItem
-            route={{
-              href: "/gallery",
-              label: "Component gallery",
-              description: "Design-system playground",
-              group: "Overview",
-              icon: Frame,
-              phase: 1,
-              shipped: true,
-            }}
-            active={pathname === "/gallery"}
-            collapsed={collapsed}
-            onNavigate={() => setMobileNavOpen(false)}
-          />
           {!collapsed ? (
-            <p className="micro-label px-2 pt-2.5 text-ink-3">
+            <p className="micro-label px-2 py-2 text-ink-3">
               Phase {CURRENT_PHASE} · shell + dashboard
             </p>
           ) : null}
