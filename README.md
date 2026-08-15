@@ -7,7 +7,7 @@ Data Protection Operating System — a compliance console built against the
 > **Plan first:** [implementation.md](./implementation.md) is the source of
 > truth for architecture, design language, page specs, and API contracts.
 
-## Quick start
+## Quick start (local)
 
 ```bash
 npm install
@@ -20,11 +20,49 @@ The frontend runs on **:3001** and proxies `/api/*` to the backend on
 
 ```bash
 cd ../dpdpos_backend
-npm run prisma:migrate && npm run prisma:seed
+npm run docker:up
+npx prisma migrate deploy && npm run prisma:seed
 npm run dev                        # http://localhost:3000
+# optional second terminal:
+npm run dev:worker
 ```
 
-Demo credentials (seed): `admin@demo.dpdpos.local` / `ChangeMe123!`
+Demo credentials (seed):
+
+| Field | Value |
+|---|---|
+| Organization ID | `00000000-0000-4000-8000-000000000001` |
+| Email | `admin@demo.dpdpos.local` |
+| Password | `ChangeMe123!` |
+
+Local env (`.env.local`):
+
+```env
+BACKEND_URL=http://localhost:3000
+# Leave empty — browser calls same-origin /api which rewrites to the backend
+NEXT_PUBLIC_API_BASE_URL=
+```
+
+## Production / free-tier deployment
+
+Deploy this console on **Vercel** (Hobby), pointed at a Render-hosted API.
+
+**Full guide (all components):** in the backend repo, open  
+`docs/14_deployment.md` (sibling checkout: `../dpdpos_backend/docs/14_deployment.md`).
+
+Minimum Vercel settings:
+
+| Variable | Example |
+|---|---|
+| `BACKEND_URL` | `https://dpdpos-api.onrender.com` |
+| `NEXT_PUBLIC_API_BASE_URL` | *(empty)* |
+
+After deploy, set the backend’s `FRONTEND_PUBLIC_URL` to your Vercel URL and
+`API_PUBLIC_URL` to the Render API URL, then redeploy the API (needed for
+Entra redirects and CLI token instructions).
+
+Directory identity (Entra / AD) is configured in **Settings → Directory identity**
+after you sign in as an org admin.
 
 ## Scripts
 
@@ -36,13 +74,9 @@ Demo credentials (seed): `admin@demo.dpdpos.local` / `ChangeMe123!`
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` / `npm run test:watch` | Vitest (unit + component, MSW) |
 
-## Phase 0 status (component gallery)
+## Related repos
 
-- ✅ create-next-app (Next 16, React 19, Tailwind v4, TS strict)
-- ✅ Design tokens (`src/app/globals.css`) — §4 of implementation.md
-- ✅ API client + envelope/ApiError + query keys (`src/lib/api`)
-- ✅ Primitives (`src/components/ui`) + DataTable
-- ✅ Gallery at `/` with live `/healthz` status pill
-- ✅ Vitest + MSW with envelope-shaped fixtures
-
-Next up: Phase 1 — auth, session layer, and the app shell.
+| Repo | Purpose |
+|---|---|
+| `dpdpos_backend` | API + worker |
+| `dpdp-cli` | npm package `dpdp-cli` (`dpdp` binary) for assessment scans |
