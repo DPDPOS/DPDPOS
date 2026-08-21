@@ -6,4 +6,8 @@ export const INDUSTRY_DOMAIN_OPTIONS = [
   { value: "education_edtech", label: "Education & EdTech" },
   { value: "it_saas", label: "IT, SaaS & B2B Tech" },
   { value: "telecom", label: "Telecom & Digital Communications" },
+  { value: "automobile", label: "Automobile & Automotive" },
+  { value: "food_manufacturing", label: "Food Manufacturing & Processing" },
+  { value: "hotels", label: "Hotels & Hospitality" },
+  { value: "space_technology", label: "Space Technology & Aerospace" },
 ] as const;

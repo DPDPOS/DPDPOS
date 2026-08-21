@@ -24,10 +24,12 @@ import { RoadmapPhases } from "./roadmap-phases";
 const INDUSTRY_SUGGESTIONS = [
   "education",
   "healthcare",
-  "gaming",
-  "social media",
   "financial services",
   "e-commerce",
+  "automobile",
+  "food manufacturing",
+  "hotels",
+  "space technology",
   "technology",
 ];
 
