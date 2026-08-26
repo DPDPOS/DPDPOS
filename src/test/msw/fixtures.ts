@@ -313,6 +313,7 @@ const seedActivities: ProcessingActivityResponse[] = [
   {
     id: "pa000000-0000-4000-8000-000000000001",
     dataAssetId: "a0000000-0000-4000-8000-000000000001",
+    vendorId: null,
     purpose: "Payroll administration",
     sourceSystem: "SAP HR",
     recipientType: "Processor",
@@ -326,6 +327,7 @@ const seedActivities: ProcessingActivityResponse[] = [
   {
     id: "pa000000-0000-4000-8000-000000000002",
     dataAssetId: "a0000000-0000-4000-8000-000000000002",
+    vendorId: null,
     purpose: "Customer support ticketing",
     sourceSystem: "Zendesk",
     recipientType: "Internal",
@@ -339,6 +341,7 @@ const seedActivities: ProcessingActivityResponse[] = [
   {
     id: "pa000000-0000-4000-8000-000000000003",
     dataAssetId: "a0000000-0000-4000-8000-000000000003",
+    vendorId: null,
     purpose: "Trial outcome processing",
     sourceSystem: "Trial OS",
     recipientType: "Third party",
