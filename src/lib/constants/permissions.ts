@@ -99,6 +99,13 @@ export const PERMISSIONS = {
   IDENTITY_READ: "identity:read",
   IDENTITY_UPDATE: "identity:update",
   IDENTITY_SYNC: "identity:sync",
+
+  // vendors / TPRM / SCRM
+  VENDOR_READ: "vendor:read",
+  VENDOR_CREATE: "vendor:create",
+  VENDOR_UPDATE: "vendor:update",
+  VENDOR_REVIEW: "vendor:review",
+  VENDOR_OFFBOARD: "vendor:offboard",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -200,6 +207,17 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       PERMISSIONS.PROCESSING_ACTIVITY_READ,
       PERMISSIONS.PROCESSING_ACTIVITY_UPDATE,
       PERMISSIONS.PROCESSING_ACTIVITY_DELETE,
+    ],
+  },
+  {
+    id: "vendors",
+    label: "Vendors / TPRM",
+    permissions: [
+      PERMISSIONS.VENDOR_READ,
+      PERMISSIONS.VENDOR_CREATE,
+      PERMISSIONS.VENDOR_UPDATE,
+      PERMISSIONS.VENDOR_REVIEW,
+      PERMISSIONS.VENDOR_OFFBOARD,
     ],
   },
   {

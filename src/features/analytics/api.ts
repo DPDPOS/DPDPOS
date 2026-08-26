@@ -6,6 +6,7 @@ import type {
   EvidenceCoverage,
   RightsRequestMetrics,
   ValidationSummary,
+  VendorRiskSummary,
   ViolationBreakdown,
 } from "./types";
 
@@ -22,4 +23,6 @@ export const analyticsApi = {
   consent: () => apiClient.get<ConsentMetrics>("/analytics/consent"),
   validations: () =>
     apiClient.get<ValidationSummary>("/analytics/validations"),
+  vendorRisk: () =>
+    apiClient.get<VendorRiskSummary>("/analytics/vendor-risk"),
 };

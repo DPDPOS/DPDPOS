@@ -31,6 +31,7 @@ import {
 } from "@/features/rights/hooks";
 import { useUsers } from "@/features/users/hooks";
 import { SlaTimer } from "./sla-timer";
+import { ErasureEvidencePanel } from "./erasure-evidence-panel";
 
 interface RequestDetailDrawerProps {
   open: boolean;
@@ -331,6 +332,11 @@ export function RequestDetailDrawer({
             </p>
           </div>
         ) : null}
+
+        <ErasureEvidencePanel
+          requestId={request.id}
+          requestType={request.requestType}
+        />
 
         {/* Assignee / timestamps */}
         <dl className="grid grid-cols-2 gap-2 text-xs text-ink-2">

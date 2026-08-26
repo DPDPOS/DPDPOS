@@ -50,6 +50,8 @@ export interface CreateRightsRequestPayload {
   requestType: RightsRequestType;
   requesterReference: string;
   assignedTo?: string;
+  immediateErase?: boolean;
+  coolingOffDays?: number;
 }
 
 export interface UpdateRightsRequestPayload {

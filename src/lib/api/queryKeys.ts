@@ -14,6 +14,7 @@ export const queryKeys = {
   rightsMetrics: ["analytics", "rights-requests"] as const,
   consentMetrics: ["analytics", "consent"] as const,
   validationSummary: ["analytics", "validations"] as const,
+  vendorRisk: ["analytics", "vendor-risk"] as const,
   // Parameterised keys return the bare prefix when called without a filter:
   // invalidateQueries matches by array prefix, so ["framework"] invalidates
   // every ["framework", …] query, whereas a trailing undefined element would
@@ -71,4 +72,8 @@ export const queryKeys = {
   assessmentReport: (id: string) => ["assessments", id, "report"] as const,
   assessmentAudit: (id: string) => ["assessments", id, "audit"] as const,
   assessmentQuestionnaireCatalog: ["assessments", "questionnaire-catalog"] as const,
+  vendors: (filter?: Record<string, unknown>) =>
+    filter ? (["vendors", filter] as const) : (["vendors"] as const),
+  vendor: (id?: string) =>
+    id ? (["vendors", "detail", id] as const) : (["vendors", "detail"] as const),
 } as const;

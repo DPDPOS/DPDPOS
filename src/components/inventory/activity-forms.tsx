@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/errors";
 import { useDataAssets } from "@/features/dataAssets/hooks";
+import { useVendors } from "@/features/vendors/hooks";
 import type { ProcessingActivityResponse } from "@/features/processingActivities/types";
 import {
   activityFormSchema,
@@ -40,6 +41,7 @@ function ActivityFormFields({
 }) {
   const { register, control, formState } = form;
   const assets = useDataAssets();
+  const vendors = useVendors();
   const selectedAssetId = form.watch("dataAssetId") || lockedAssetId;
   const selectedAsset = assets.data?.find((asset) => asset.id === selectedAssetId);
   const dpiaRelevant = dpiaRequiredFor(selectedAsset?.sensitivity);
@@ -105,17 +107,40 @@ function ActivityFormFields({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Processor" htmlFor="pa-processor" hint="Named processor if any">
-          <Input id="pa-processor" placeholder="Acme Payroll Pvt Ltd" {...register("processorName")} />
+        <Field label="Vendor (registry)" htmlFor="pa-vendor" hint="Link to TPRM vendor when PII is shared">
+          <Controller
+            control={control}
+            name="vendorId"
+            render={({ field }) => (
+              <Select
+                id="pa-vendor"
+                value={field.value ?? ""}
+                onChange={(event) => field.onChange(event.target.value || "")}
+                aria-label="Vendor"
+              >
+                <option value="">None / free-text only</option>
+                {(vendors.data ?? []).map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>
+                    {vendor.name} · {vendor.status}
+                  </option>
+                ))}
+              </Select>
+            )}
+          />
         </Field>
-        <Field label="Legal basis" htmlFor="pa-legal" hint="e.g. Consent, Contract, Legal obligation">
-          <Input id="pa-legal" placeholder="Contract" {...register("legalBasis")} />
+        <Field label="Processor" htmlFor="pa-processor" hint="Named processor if any (fallback)">
+          <Input id="pa-processor" placeholder="Acme Payroll Pvt Ltd" {...register("processorName")} />
         </Field>
       </div>
 
-      <Field label="Retention rule" htmlFor="pa-retention" hint="e.g. Deleted 36 months after termination">
-        <Input id="pa-retention" placeholder="36 months after termination" {...register("retentionRule")} />
-      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Legal basis" htmlFor="pa-legal" hint="e.g. Consent, Contract, Legal obligation">
+          <Input id="pa-legal" placeholder="Contract" {...register("legalBasis")} />
+        </Field>
+        <Field label="Retention rule" htmlFor="pa-retention" hint="e.g. Deleted 36 months after termination">
+          <Input id="pa-retention" placeholder="36 months after termination" {...register("retentionRule")} />
+        </Field>
+      </div>
 
       <Field label="Notes" htmlFor="pa-notes">
         <textarea
@@ -158,6 +183,7 @@ export function CreateActivityDrawer({
       sourceSystem: cleanOptional(values.sourceSystem),
       recipientType: cleanOptional(values.recipientType),
       processorName: cleanOptional(values.processorName),
+      vendorId: values.vendorId ? values.vendorId : null,
       legalBasis: cleanOptional(values.legalBasis),
       retentionRule: cleanOptional(values.retentionRule),
       notes: cleanOptional(values.notes),
@@ -219,6 +245,7 @@ export function EditActivityDrawer({
           sourceSystem: activity.sourceSystem ?? "",
           recipientType: activity.recipientType ?? "",
           processorName: activity.processorName ?? "",
+          vendorId: activity.vendorId ?? "",
           legalBasis: activity.legalBasis ?? "",
           retentionRule: activity.retentionRule ?? "",
           notes: activity.notes ?? "",
@@ -236,6 +263,7 @@ export function EditActivityDrawer({
         sourceSystem: cleanOptional(values.sourceSystem),
         recipientType: cleanOptional(values.recipientType),
         processorName: cleanOptional(values.processorName),
+        vendorId: values.vendorId ? values.vendorId : null,
         legalBasis: cleanOptional(values.legalBasis),
         retentionRule: cleanOptional(values.retentionRule),
         notes: cleanOptional(values.notes),

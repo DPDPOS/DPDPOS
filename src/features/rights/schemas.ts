@@ -6,6 +6,8 @@ export const createRightsRequestSchema = z.object({
   requestType: z.enum(REQUEST_TYPES),
   requesterReference: z.string().trim().min(1).max(500),
   assignedTo: z.string().optional(),
+  immediateErase: z.boolean().optional(),
+  coolingOffDays: z.number().int().min(1).max(30).optional(),
 });
 export type CreateRightsRequestFormValues = z.infer<
   typeof createRightsRequestSchema

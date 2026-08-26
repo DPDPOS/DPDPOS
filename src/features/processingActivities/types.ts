@@ -5,6 +5,7 @@ export const DPIA_CONTROL_CODE = "CTRL-SDF-DPIA";
 export interface ProcessingActivityResponse {
   id: string;
   dataAssetId: string;
+  vendorId: string | null;
   purpose: string;
   sourceSystem: string | null;
   recipientType: string | null;
@@ -23,6 +24,7 @@ export interface CreateProcessingActivityPayload {
   sourceSystem?: string;
   recipientType?: string;
   processorName?: string;
+  vendorId?: string | null;
   legalBasis?: string;
   retentionRule?: string;
   notes?: string;

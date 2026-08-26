@@ -7,6 +7,7 @@ export const activityFormSchema = z.object({
   sourceSystem: z.string().trim().max(100).optional(),
   recipientType: z.string().trim().max(100).optional(),
   processorName: z.string().trim().max(255).optional(),
+  vendorId: z.string().uuid().optional().or(z.literal("")),
   legalBasis: z.string().trim().max(255).optional(),
   retentionRule: z.string().trim().max(255).optional(),
   notes: z.string().trim().max(2000).optional(),

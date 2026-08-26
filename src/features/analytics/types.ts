@@ -44,6 +44,15 @@ export interface ValidationSummary {
   failed: number;
 }
 
+export interface VendorRiskSummary {
+  totalVendors: number;
+  activeVendors: number;
+  missingDpa: number;
+  highRisk: number;
+  reviewsOverdue: number;
+  dpaExpiring: number;
+}
+
 export interface DashboardOverview {
   complianceScore: ComplianceScoreResult;
   violations: ViolationBreakdown;

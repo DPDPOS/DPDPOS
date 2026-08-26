@@ -17,8 +17,8 @@ import {
 } from "@/lib/constants/status-maps";
 import { cn } from "@/lib/utils/cn";
 import { useSessionStore } from "@/state/session";
-import { useCanReadAnalytics, useDashboardOverview } from "@/features/analytics/hooks";
-import type { DashboardOverview } from "@/features/analytics/types";
+import { useCanReadAnalytics, useDashboardOverview, useVendorRiskSummary } from "@/features/analytics/hooks";
+import type { DashboardOverview, VendorRiskSummary } from "@/features/analytics/types";
 import { BarList, MiniDonut, ProgressRing } from "./charts";
 
 /**
@@ -31,6 +31,7 @@ export function DashboardView() {
   const canRead = useCanReadAnalytics();
   const { data, isLoading, isError, error, isFetching, refetch } =
     useDashboardOverview(canRead);
+  const vendorRisk = useVendorRiskSummary(canRead);
 
   if (!canRead) {
     return <ReducedDashboard user={user} />;
@@ -39,8 +40,11 @@ export function DashboardView() {
   return (
     <div className="space-y-6">
       <DashboardHeader
-        isFetching={isFetching}
-        onRefresh={() => void refetch()}
+        isFetching={isFetching || vendorRisk.isFetching}
+        onRefresh={() => {
+          void refetch();
+          void vendorRisk.refetch();
+        }}
         trailing={
           <div className="hidden items-center gap-2 sm:flex">
             {(user?.roles ?? []).map((role) => (
@@ -64,7 +68,7 @@ export function DashboardView() {
       ) : null}
 
       {!isLoading && !isError && data ? (
-        <DashboardBody data={data} />
+        <DashboardBody data={data} vendorRisk={vendorRisk.data} />
       ) : null}
     </div>
   );
@@ -72,14 +76,21 @@ export function DashboardView() {
 
 /* Full board ---------------------------------------------------------------- */
 
-function DashboardBody({ data }: { data: DashboardOverview }) {
+function DashboardBody({
+  data,
+  vendorRisk,
+}: {
+  data: DashboardOverview;
+  vendorRisk?: VendorRiskSummary;
+}) {
   const { complianceScore, violations, evidence, rightsRequests, consent } = data;
   const empty =
     complianceScore.totalRules === 0 &&
     violations.total === 0 &&
     evidence.totalControls === 0 &&
     rightsRequests.total === 0 &&
-    consent.totalRecords === 0;
+    consent.totalRecords === 0 &&
+    (vendorRisk?.totalVendors ?? 0) === 0;
 
   if (empty) {
     return (
@@ -250,6 +261,45 @@ function DashboardBody({ data }: { data: DashboardOverview }) {
           </CardBody>
         </Card>
       </div>
+
+      {vendorRisk ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Vendor / third-party risk</CardTitle>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/vendors">
+                Open vendors
+                <ArrowUpRight className="size-3.5" aria-hidden />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardBody>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <VendorRiskStat label="Active" value={vendorRisk.activeVendors} />
+              <VendorRiskStat
+                label="Missing DPA"
+                value={vendorRisk.missingDpa}
+                warn={vendorRisk.missingDpa > 0}
+              />
+              <VendorRiskStat
+                label="DPA expiring"
+                value={vendorRisk.dpaExpiring}
+                warn={vendorRisk.dpaExpiring > 0}
+              />
+              <VendorRiskStat
+                label="High residual risk"
+                value={vendorRisk.highRisk}
+                warn={vendorRisk.highRisk > 0}
+              />
+              <VendorRiskStat
+                label="Reviews overdue"
+                value={vendorRisk.reviewsOverdue}
+                warn={vendorRisk.reviewsOverdue > 0}
+              />
+            </div>
+          </CardBody>
+        </Card>
+      ) : null}
 
       {/* Row 2 — violations + rights breakdowns ------------------------------ */}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -557,6 +607,30 @@ function Row({
 }
 
 /* Skeleton ------------------------------------------------------------------- */
+
+function VendorRiskStat({
+  label,
+  value,
+  warn,
+}: {
+  label: string;
+  value: number;
+  warn?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="micro-label text-ink-3">{label}</p>
+      <p
+        className={cn(
+          "tabular text-xl font-semibold tracking-tight",
+          warn ? "text-fail" : "text-ink",
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
 
 function DashboardSkeleton() {
   return (

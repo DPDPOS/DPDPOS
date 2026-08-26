@@ -66,6 +66,14 @@ export function useValidationSummary(enabled = true) {
   });
 }
 
+export function useVendorRiskSummary(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.vendorRisk,
+    queryFn: analyticsApi.vendorRisk,
+    enabled,
+  });
+}
+
 /** The session may hold stale permissions until /auth/me hydrates it. */
 export function useCanReadAnalytics(): boolean {
   return useSessionStore((state) =>
