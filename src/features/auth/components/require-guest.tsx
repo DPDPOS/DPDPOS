@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { bootstrapSession } from "@/features/auth/session";
+import { postAuthPath } from "@/features/auth/post-auth-path";
 import { useSessionStore } from "@/state/session";
 
 export function RequireGuest({ children }: { children: React.ReactNode }) {
   const status = useSessionStore((state) => state.status);
+  const user = useSessionStore((state) => state.user);
   const router = useRouter();
 
   useEffect(() => {
@@ -15,8 +17,10 @@ export function RequireGuest({ children }: { children: React.ReactNode }) {
   }, [status]);
 
   useEffect(() => {
-    if (status === "authenticated") router.replace("/dashboard");
-  }, [status, router]);
+    if (status === "authenticated") {
+      router.replace(user ? postAuthPath(user) : "/dashboard");
+    }
+  }, [status, user, router]);
 
   // Wait for bootstrap before showing auth pages, so an already-signed-in
   // user never sees a flash of the login form.

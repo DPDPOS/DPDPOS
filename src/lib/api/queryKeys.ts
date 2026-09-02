@@ -72,6 +72,8 @@ export const queryKeys = {
   assessmentReport: (id: string) => ["assessments", id, "report"] as const,
   assessmentAudit: (id: string) => ["assessments", id, "audit"] as const,
   assessmentQuestionnaireCatalog: ["assessments", "questionnaire-catalog"] as const,
+  onboardingStatus: ["onboarding", "status"] as const,
+  onboardingQuestionnaire: ["onboarding", "questionnaire"] as const,
   vendors: (filter?: Record<string, unknown>) =>
     filter ? (["vendors", filter] as const) : (["vendors"] as const),
   vendor: (id?: string) =>

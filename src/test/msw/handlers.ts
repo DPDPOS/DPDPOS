@@ -72,6 +72,59 @@ export const handlers = [
     }),
   ),
 
+  http.post("/api/auth/lookup-organizations", async ({ request }) => {
+    const body = (await request.json()) as { email?: string };
+    const email = body.email?.trim().toLowerCase() ?? "";
+    if (
+      email === DEMO_CREDENTIALS.email.toLowerCase() ||
+      email === MFA_USER_EMAIL.toLowerCase()
+    ) {
+      return HttpResponse.json({
+        success: true,
+        data: {
+          organizations: [
+            {
+              id: DEMO_CREDENTIALS.organizationId,
+              name: organizationRow.name,
+              onboardingCompleted: true,
+            },
+          ],
+        },
+      });
+    }
+    return HttpResponse.json({
+      success: true,
+      data: { organizations: [] },
+    });
+  }),
+
+  http.post("/api/auth/signup", async ({ request }) => {
+    const body = (await request.json()) as {
+      organizationName: string;
+      adminName: string;
+      email: string;
+    };
+    return HttpResponse.json({
+      success: true,
+      data: {
+        mfaRequired: false,
+        mfaEnrollmentRequired: false,
+        user: {
+          ...testUser,
+          email: body.email,
+          name: body.adminName,
+          onboardingCompleted: false,
+          requiresOnboarding: true,
+        },
+        tokens: testTokens,
+        organization: {
+          ...organizationRow,
+          name: body.organizationName,
+        },
+      },
+    });
+  }),
+
   http.post("/api/auth/login", async ({ request }) => {
     const body = (await request.json()) as {
       organizationId: string;

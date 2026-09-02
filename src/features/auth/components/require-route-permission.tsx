@@ -13,7 +13,7 @@ export function RequireRoutePermission({ children }: { children: React.ReactNode
   const pathname = usePathname();
   const route = routeForPathname(pathname);
 
-  if (pathname.startsWith("/assessments") || !route?.permission) {
+  if (pathname.startsWith("/assessments") || pathname.startsWith("/onboarding") || !route?.permission) {
     return <>{children}</>;
   }
 

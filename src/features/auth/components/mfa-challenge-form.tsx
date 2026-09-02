@@ -16,6 +16,7 @@ import {
   MFA_EXPIRES_AT_KEY,
   MFA_TOKEN_KEY,
 } from "../mfa-constants";
+import { postAuthPath } from "../post-auth-path";
 import { FormAlert } from "./form-alert";
 
 function formatRemaining(ms: number): string {
@@ -91,7 +92,7 @@ export function MfaChallengeForm() {
       });
       clearMfaChallenge();
       useSessionStore.getState().markAuthenticated(result.tokens, result.user);
-      router.replace("/dashboard");
+      router.replace(postAuthPath(result.user));
     } catch (err) {
       if (err instanceof ApiError && err.code === "VALIDATION_ERROR") {
         applyFieldErrors(err, (field, opts) => {

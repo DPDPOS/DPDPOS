@@ -48,7 +48,7 @@ export function CreateAssessmentDrawer({ open, onClose, onCreated }: Props) {
       open={open}
       onClose={onClose}
       title="New assessment"
-      description="Opens the full-page onboarding flow: documents → questionnaire → CLI → evaluate → version."
+      description="Opens the full-page onboarding flow: questionnaire → CLI → evaluate → version."
     >
       <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
         <Field label="Name" htmlFor="assessment-name" error={errors.name?.message}>

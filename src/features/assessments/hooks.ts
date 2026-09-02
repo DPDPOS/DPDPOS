@@ -6,6 +6,7 @@ import { assessmentsApi } from "./api";
 import type {
   ConfirmDocumentPayload,
   CreateAssessmentPayload,
+  ImportQuestionnaireExcelPayload,
   InitiateDocumentPayload,
   SaveAnswersPayload,
   UploadDocumentPayload,
@@ -153,6 +154,15 @@ export function useSaveAssessmentAnswers(id: string) {
   return useMutation({
     mutationFn: (body: SaveAnswersPayload) =>
       assessmentsApi.saveAnswers(id, body),
+    onSuccess: invalidate,
+  });
+}
+
+export function useImportQuestionnaireExcel(id: string) {
+  const invalidate = useInvalidateAssessment(id);
+  return useMutation({
+    mutationFn: (body: ImportQuestionnaireExcelPayload) =>
+      assessmentsApi.importQuestionnaireExcel(id, body),
     onSuccess: invalidate,
   });
 }

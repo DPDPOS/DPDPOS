@@ -9,40 +9,30 @@ import { Can } from "@/components/ui/can";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/ui/status-chip";
-import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/errors";
 import { cn } from "@/lib/utils/cn";
 import { formatDate } from "@/lib/utils/format";
-import { formatFileSize, sha256Hex } from "@/features/evidence/hash";
 import {
   useAssessment,
   useAssessmentAnswers,
   useAssessmentAudit,
-  useAssessmentDocuments,
   useAssessmentReport,
   useAssessmentScans,
-  useConfirmAssessmentDocument,
   useCreateAssessmentVersion,
   useCreateCliToken,
   useEvaluateAssessment,
-  useInitiateAssessmentDocument,
+  useImportQuestionnaireExcel,
   useQuestionnaireCatalog,
   useSaveAssessmentAnswers,
-  useUploadAssessmentDocument,
 } from "@/features/assessments/hooks";
-import { assessmentsApi } from "@/features/assessments/api";
+import { downloadQuestionnaireTemplate } from "@/features/assessments/api";
 import type {
-  AssessmentDocumentType,
   CliTokenResponse,
   QuestionnaireQuestion,
 } from "@/features/assessments/types";
 
-type WorkflowStep =
-  | "documents"
-  | "questionnaire"
-  | "cli"
-  | "evaluate"
-  | "version";
+type WorkflowStep = "questionnaire" | "cli" | "evaluate" | "version";
+type QuestionnaireMode = "form" | "excel";
 
 const STEPS: Array<{
   id: WorkflowStep;
@@ -51,16 +41,10 @@ const STEPS: Array<{
   hint: string;
 }> = [
   {
-    id: "documents",
-    label: "Documents",
-    title: "Upload policy documents",
-    hint: "Required. Upload files and paste extracted text for PDFs — searchable text is what earns document credit.",
-  },
-  {
     id: "questionnaire",
     label: "Questionnaire",
     title: "DPDP readiness questionnaire",
-    hint: "Required. Profile answers (children, cross-border, SDF, vendors) change which controls apply and how hard PASS is.",
+    hint: "Required. Answer in the form or upload a filled Excel template. Profile answers (children, cross-border, SDF, vendors) change which controls apply and how hard PASS is.",
   },
   {
     id: "cli",
@@ -96,28 +80,19 @@ function formatAnswerValue(value: string | boolean | undefined): string {
   return value;
 }
 
-async function extractPlainText(file: File): Promise<string | undefined> {
-  const name = file.name.toLowerCase();
-  const textLike =
-    file.type.startsWith("text/") ||
-    name.endsWith(".txt") ||
-    name.endsWith(".md") ||
-    name.endsWith(".csv") ||
-    name.endsWith(".json") ||
-    name.endsWith(".html");
-  if (!textLike) return undefined;
-  try {
-    const text = await file.text();
-    return text.slice(0, 200_000);
-  } catch {
-    return undefined;
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
+  return btoa(binary);
 }
 
 function stepIncompleteMessage(step: WorkflowStep): string | null {
   switch (step) {
-    case "documents":
-      return "Upload at least one READY policy document before continuing.";
     case "questionnaire":
       return "Answer all required visible questions before continuing.";
     case "cli":
@@ -129,9 +104,9 @@ function stepIncompleteMessage(step: WorkflowStep): string | null {
   }
 }
 
-/** Documents + questionnaire are hard gates; CLI/evaluate allow continue-with-warning. */
+/** Questionnaire is a hard gate; CLI/evaluate allow continue-with-warning. */
 function isHardGate(step: WorkflowStep): boolean {
-  return step === "documents" || step === "questionnaire";
+  return step === "questionnaire";
 }
 
 interface Props {
@@ -147,36 +122,34 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   const { data: assessment, isError: assessmentMissing } =
     useAssessment(assessmentId);
-  const { data: documents, refetch: refetchDocs } =
-    useAssessmentDocuments(assessmentId);
-  const { data: answers } = useAssessmentAnswers(assessmentId);
+  const { data: answers, refetch: refetchAnswers } =
+    useAssessmentAnswers(assessmentId);
   const { data: catalog } = useQuestionnaireCatalog(true);
   const { data: scans, refetch: refetchScans } =
     useAssessmentScans(assessmentId);
   const { data: report, isError: reportMissing } = useAssessmentReport(
     assessmentId,
-    stepIndex >= 3 || assessment?.status === "EVALUATED",
+    stepIndex >= 2 || assessment?.status === "EVALUATED",
   );
   const { data: audit } = useAssessmentAudit(assessmentId);
 
-  const initiateDoc = useInitiateAssessmentDocument(assessmentId);
-  const confirmDoc = useConfirmAssessmentDocument(assessmentId);
-  const uploadLegacy = useUploadAssessmentDocument(assessmentId);
   const saveAnswers = useSaveAssessmentAnswers(assessmentId);
+  const importExcel = useImportQuestionnaireExcel(assessmentId);
   const mintToken = useCreateCliToken(assessmentId);
   const evaluate = useEvaluateAssessment(assessmentId);
   const createVersion = useCreateAssessmentVersion(assessmentId);
-
-  const [docFile, setDocFile] = useState<File | null>(null);
-  const [docType, setDocType] = useState<AssessmentDocumentType>("PRIVACY_NOTICE");
-  const [extractedText, setExtractedText] = useState("");
-  const [uploadingDoc, setUploadingDoc] = useState(false);
 
   const [answerMap, setAnswerMap] = useState<Record<string, string | boolean>>(
     {},
   );
   const [wizardIndex, setWizardIndex] = useState(0);
   const [savingAnswer, setSavingAnswer] = useState(false);
+  const [questionnaireMode, setQuestionnaireMode] =
+    useState<QuestionnaireMode>("form");
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [importingExcel, setImportingExcel] = useState(false);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
   const [cliLabel, setCliLabel] = useState("evaluator-laptop");
   const [minted, setMinted] = useState<CliTokenResponse | null>(null);
@@ -185,16 +158,10 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   const questions = catalog?.questions ?? [];
   const stages = catalog?.stages ?? [];
-  const documentTypes = catalog?.documentTypes ?? [];
 
   const visibleQuestions = useMemo(
     () => questions.filter((q) => isQuestionVisible(q, answerMap)),
     [questions, answerMap],
-  );
-
-  const docsComplete = useMemo(
-    () => (documents ?? []).some((d) => d.uploadStatus === "READY"),
-    [documents],
   );
 
   const quizComplete = useMemo(() => {
@@ -218,8 +185,6 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   const stepComplete = (id: WorkflowStep): boolean => {
     switch (id) {
-      case "documents":
-        return docsComplete;
       case "questionnaire":
         return quizComplete;
       case "cli":
@@ -234,7 +199,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
   const firstIncompleteIndex = useMemo(() => {
     const idx = STEPS.findIndex((s) => !stepComplete(s.id));
     return idx < 0 ? STEPS.length - 1 : idx;
-  }, [docsComplete, quizComplete, cliComplete, evaluateComplete]);
+  }, [quizComplete, cliComplete, evaluateComplete]);
 
   useEffect(() => {
     if (!answers) return;
@@ -264,13 +229,13 @@ export function AssessmentWizard({ assessmentId }: Props) {
 
   useEffect(() => {
     if (resumedForId.current === assessmentId) return;
-    if (documents === undefined || answers === undefined || scans === undefined) {
+    if (answers === undefined || scans === undefined) {
       return;
     }
     resumedForId.current = assessmentId;
     setStepIndex(firstIncompleteIndex);
     setMaxReachedIndex(firstIncompleteIndex);
-  }, [assessmentId, documents, answers, scans, firstIncompleteIndex]);
+  }, [assessmentId, answers, scans, firstIncompleteIndex]);
 
   useEffect(() => {
     if (!visibleQuestions.length) {
@@ -387,62 +352,49 @@ export function AssessmentWizard({ assessmentId }: Props) {
     }
   };
 
-  const uploadDocumentFile = async () => {
-    const pasted = extractedText.trim();
-    if (!docFile && !pasted) {
-      setActionError("Choose a file and/or paste extracted text.");
+  const handleDownloadTemplate = async () => {
+    setActionError(null);
+    setDownloadingTemplate(true);
+    try {
+      await downloadQuestionnaireTemplate();
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Could not download template",
+      );
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
+
+  const handleImportExcel = async () => {
+    if (!excelFile) {
+      setActionError("Choose an Excel (.xlsx) file to import.");
       return;
     }
     setActionError(null);
-    setUploadingDoc(true);
+    setImportSuccess(null);
+    setImportingExcel(true);
     try {
-      if (docFile) {
-        const mimeType = docFile.type || "application/octet-stream";
-        const { document, uploadUrl } = await initiateDoc.mutateAsync({
-          fileName: docFile.name,
-          mimeType,
-          documentType: docType,
-        });
-        const put = await fetch(uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": mimeType },
-          body: docFile,
-        });
-        if (!put.ok) {
-          throw new Error(`Upload to storage failed (HTTP ${put.status})`);
-        }
-        const fileHash = await sha256Hex(docFile);
-        const autoText = await extractPlainText(docFile);
-        await confirmDoc.mutateAsync({
-          documentId: document.id,
-          body: {
-            fileHash,
-            fileSizeBytes: docFile.size,
-            extractedText: pasted || autoText,
-          },
-        });
-      } else {
-        await uploadLegacy.mutateAsync({
-          fileName: `${docType.toLowerCase()}.txt`,
-          fileType: "text/plain",
-          documentType: docType,
-          extractedText: pasted,
-          contentBase64: btoa(unescape(encodeURIComponent(pasted))),
-        });
-      }
-      setDocFile(null);
-      setExtractedText("");
-      void refetchDocs();
+      const contentBase64 = await fileToBase64(excelFile);
+      const result = await importExcel.mutateAsync({
+        fileName: excelFile.name,
+        contentBase64,
+      });
+      setExcelFile(null);
+      setImportSuccess(
+        `Imported ${result.saved} answer(s) into version ${result.versionNumber}.`,
+      );
+      await refetchAnswers();
     } catch (err) {
       setActionError(
         err instanceof ApiError
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Upload failed",
+            : "Excel import failed",
       );
     } finally {
-      setUploadingDoc(false);
+      setImportingExcel(false);
     }
   };
 
@@ -577,283 +529,243 @@ export function AssessmentWizard({ assessmentId }: Props) {
             </p>
           ) : null}
 
-          {currentStep.id === "documents" ? (
-            <div className="space-y-5">
-              <Can perm="assessment:update">
-                <div className="space-y-4 rounded-sm border border-border bg-surface p-4 sm:p-5">
-                  <Field label="Document type" htmlFor="doc-type">
-                    <select
-                      id="doc-type"
-                      className="h-10 w-full rounded-sm border border-border bg-surface px-2 text-[13px]"
-                      value={docType}
-                      onChange={(e) =>
-                        setDocType(e.target.value as AssessmentDocumentType)
-                      }
-                    >
-                      {(documentTypes.length
-                        ? documentTypes
-                        : [
-                            {
-                              value: "PRIVACY_NOTICE" as const,
-                              label: "Privacy notice",
-                            },
-                            { value: "OTHER" as const, label: "Other" },
-                          ]
-                      ).map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field
-                    label="Policy file"
-                    htmlFor="doc-file"
-                    hint="Prefer uploading the real PDF/DOCX/TXT. Required unless you only paste text below."
-                  >
-                    <Input
-                      id="doc-file"
-                      type="file"
-                      accept=".pdf,.doc,.docx,.txt,.md,.html,.rtf,application/pdf,text/*"
-                      onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
-                    />
-                  </Field>
-                  {docFile ? (
-                    <p className="text-[12px] text-ink-3">
-                      {docFile.name} · {formatFileSize(docFile.size)}
-                    </p>
-                  ) : null}
-                  <Field
-                    label="Extracted text (optional)"
-                    htmlFor="doc-text"
-                    hint="Paste OCR / copied policy text for PDFs and scans so control evaluation can match keywords. Text files are auto-read when left blank."
-                  >
-                    <Textarea
-                      id="doc-text"
-                      rows={8}
-                      value={extractedText}
-                      onChange={(e) => setExtractedText(e.target.value)}
-                      placeholder="Paste privacy notice / retention / breach policy text…"
-                    />
-                  </Field>
-                  <Button
-                    type="button"
-                    disabled={
-                      uploadingDoc || (!docFile && !extractedText.trim())
-                    }
-                    onClick={() => void uploadDocumentFile()}
-                  >
-                    {uploadingDoc ? "Uploading…" : "Add document"}
-                  </Button>
-                </div>
-              </Can>
-              <ul className="space-y-2">
-                {(documents ?? []).map((doc) => (
-                  <li
-                    key={doc.id}
-                    className="flex items-start justify-between gap-2 rounded-sm border border-border bg-surface px-3 py-2.5 text-[13px]"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-ink">
-                        {doc.fileName}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-ink-3">
-                        {doc.documentType.replaceAll("_", " ")} ·{" "}
-                        {doc.uploadStatus}
-                        {doc.fileSizeBytes != null
-                          ? ` · ${formatFileSize(doc.fileSizeBytes)}`
-                          : ""}{" "}
-                        · v{doc.versionNumber}
-                      </div>
-                    </div>
-                    {doc.uploadStatus === "READY" && doc.storageKey ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={async () => {
-                          try {
-                            const { downloadUrl } =
-                              await assessmentsApi.downloadDocument(
-                                assessmentId,
-                                doc.id,
-                              );
-                            window.open(
-                              downloadUrl,
-                              "_blank",
-                              "noopener,noreferrer",
-                            );
-                          } catch (err) {
-                            setActionError(
-                              err instanceof ApiError
-                                ? err.message
-                                : "Could not open download",
-                            );
-                          }
-                        }}
-                      >
-                        Open
-                      </Button>
-                    ) : null}
-                  </li>
-                ))}
-                {(documents ?? []).length === 0 ? (
-                  <p className="text-[13px] text-ink-3">
-                    No documents uploaded yet.
-                  </p>
-                ) : null}
-              </ul>
-            </div>
-          ) : null}
-
           {currentStep.id === "questionnaire" ? (
             <div className="space-y-5">
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink-3">
-                  <span>
-                    {currentStage
-                      ? `Stage ${stageNumber}/${stages.length}: ${currentStage.stageLabel}`
-                      : "Questionnaire"}
-                  </span>
-                  <span>
-                    {answeredVisible.length}/{visibleQuestions.length} answered ·{" "}
-                    {progressPct}%
-                  </span>
-                </div>
-                {catalog?.industryDomainLabel ? (
-                  <p className="rounded-sm border border-border bg-surface-2 px-3 py-2 text-[12px] text-ink-2">
-                    Industry pack:{" "}
-                    <span className="font-medium text-ink">
-                      {catalog.industryDomainLabel}
-                    </span>
-                    . Core DPDP questions plus sector-specific context.
-                  </p>
-                ) : catalog?.industryHint ? (
-                  <p className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-ink-2">
-                    {catalog.industryHint}
-                  </p>
-                ) : null}
-                <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
-                  <div
-                    className="h-full bg-accent transition-all"
-                    style={{ width: `${progressPct}%` }}
-                  />
-                </div>
+              <div className="inline-flex rounded-sm border border-border bg-surface p-0.5">
+                {(
+                  [
+                    { id: "form" as const, label: "Form" },
+                    { id: "excel" as const, label: "Excel" },
+                  ] as const
+                ).map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => {
+                      setQuestionnaireMode(mode.id);
+                      setActionError(null);
+                      if (mode.id === "form") setImportSuccess(null);
+                    }}
+                    className={cn(
+                      "rounded-sm px-3 py-1.5 text-[12px] font-medium transition-colors",
+                      questionnaireMode === mode.id
+                        ? "bg-accent text-white"
+                        : "text-ink-2 hover:bg-surface-2",
+                    )}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
               </div>
 
-              {currentQuestion ? (
-                <div className="space-y-4 rounded-sm border border-border bg-surface p-5 sm:p-6">
-                  <p className="text-base font-medium leading-snug text-ink">
-                    {currentQuestion.label}
+              {questionnaireMode === "excel" ? (
+                <div className="space-y-4 rounded-sm border border-border bg-surface p-4 sm:p-5">
+                  <p className="text-[13px] text-ink-2">
+                    Download the template, fill answers in Excel, then upload the
+                    completed workbook. Existing answers for matching question
+                    codes are overwritten.
                   </p>
-                  <p className="text-[13px] leading-relaxed text-ink-2">
-                    {currentQuestion.helpText}
-                  </p>
-                  <p className="font-mono text-[10px] text-ink-3">
-                    {currentQuestion.code}
-                  </p>
-
                   <Can perm="assessment:update">
-                    {currentQuestion.valueType === "boolean" ? (
-                      <div className="flex flex-wrap gap-2">
-                        {[true, false].map((val) => (
-                          <Button
-                            key={String(val)}
-                            type="button"
-                            disabled={savingAnswer}
-                            variant={
-                              answerMap[currentQuestion.code] === val
-                                ? "primary"
-                                : "secondary"
-                            }
-                            onClick={() =>
-                              void commitAnswer(currentQuestion.code, val)
-                            }
-                          >
-                            {val ? "Yes" : "No"}
-                          </Button>
-                        ))}
-                      </div>
-                    ) : currentQuestion.options?.length ? (
-                      <select
-                        className="h-10 w-full max-w-md rounded-sm border border-border bg-surface px-2 text-[13px]"
-                        disabled={savingAnswer}
-                        value={String(answerMap[currentQuestion.code] ?? "")}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (!value) return;
-                          void commitAnswer(currentQuestion.code, value);
-                        }}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={downloadingTemplate}
+                        onClick={() => void handleDownloadTemplate()}
                       >
-                        <option value="">Select…</option>
-                        {currentQuestion.options.map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt.replaceAll("_", " ")}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div className="flex max-w-md gap-2">
-                        <Input
-                          value={String(answerMap[currentQuestion.code] ?? "")}
-                          onChange={(e) =>
-                            setAnswerMap((prev) => ({
-                              ...prev,
-                              [currentQuestion.code]: e.target.value,
-                            }))
-                          }
-                        />
+                        {downloadingTemplate
+                          ? "Downloading…"
+                          : "Download template"}
+                      </Button>
+                    </div>
+                    <Field
+                      label="Filled workbook"
+                      htmlFor="excel-file"
+                      hint="Accepts .xlsx files exported from the template."
+                    >
+                      <Input
+                        id="excel-file"
+                        type="file"
+                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        onChange={(e) => {
+                          setExcelFile(e.target.files?.[0] ?? null);
+                          setImportSuccess(null);
+                        }}
+                      />
+                    </Field>
+                    {excelFile ? (
+                      <p className="text-[12px] text-ink-3">{excelFile.name}</p>
+                    ) : null}
+                    <Button
+                      type="button"
+                      disabled={importingExcel || !excelFile}
+                      onClick={() => void handleImportExcel()}
+                    >
+                      {importingExcel ? "Importing…" : "Import answers"}
+                    </Button>
+                  </Can>
+                  {importSuccess ? (
+                    <p className="rounded-sm border border-pass/30 bg-pass-bg px-3 py-2 text-[12px] text-pass">
+                      {importSuccess}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink-3">
+                      <span>
+                        {currentStage
+                          ? `Stage ${stageNumber}/${stages.length}: ${currentStage.stageLabel}`
+                          : "Questionnaire"}
+                      </span>
+                      <span>
+                        {answeredVisible.length}/{visibleQuestions.length}{" "}
+                        answered · {progressPct}%
+                      </span>
+                    </div>
+                    {catalog?.industryDomainLabel ? (
+                      <p className="rounded-sm border border-border bg-surface-2 px-3 py-2 text-[12px] text-ink-2">
+                        Industry pack:{" "}
+                        <span className="font-medium text-ink">
+                          {catalog.industryDomainLabel}
+                        </span>
+                        . Core DPDP questions plus sector-specific context.
+                      </p>
+                    ) : catalog?.industryHint ? (
+                      <p className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-ink-2">
+                        {catalog.industryHint}
+                      </p>
+                    ) : null}
+                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+                      <div
+                        className="h-full bg-accent transition-all"
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {currentQuestion ? (
+                    <div className="space-y-4 rounded-sm border border-border bg-surface p-5 sm:p-6">
+                      <p className="text-base font-medium leading-snug text-ink">
+                        {currentQuestion.label}
+                      </p>
+                      <p className="text-[13px] leading-relaxed text-ink-2">
+                        {currentQuestion.helpText}
+                      </p>
+                      <p className="font-mono text-[10px] text-ink-3">
+                        {currentQuestion.code}
+                      </p>
+
+                      <Can perm="assessment:update">
+                        {currentQuestion.valueType === "boolean" ? (
+                          <div className="flex flex-wrap gap-2">
+                            {[true, false].map((val) => (
+                              <Button
+                                key={String(val)}
+                                type="button"
+                                disabled={savingAnswer}
+                                variant={
+                                  answerMap[currentQuestion.code] === val
+                                    ? "primary"
+                                    : "secondary"
+                                }
+                                onClick={() =>
+                                  void commitAnswer(currentQuestion.code, val)
+                                }
+                              >
+                                {val ? "Yes" : "No"}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : currentQuestion.options?.length ? (
+                          <select
+                            className="h-10 w-full max-w-md rounded-sm border border-border bg-surface px-2 text-[13px]"
+                            disabled={savingAnswer}
+                            value={String(answerMap[currentQuestion.code] ?? "")}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (!value) return;
+                              void commitAnswer(currentQuestion.code, value);
+                            }}
+                          >
+                            <option value="">Select…</option>
+                            {currentQuestion.options.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt.replaceAll("_", " ")}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="flex max-w-md gap-2">
+                            <Input
+                              value={String(
+                                answerMap[currentQuestion.code] ?? "",
+                              )}
+                              onChange={(e) =>
+                                setAnswerMap((prev) => ({
+                                  ...prev,
+                                  [currentQuestion.code]: e.target.value,
+                                }))
+                              }
+                            />
+                            <Button
+                              type="button"
+                              disabled={
+                                savingAnswer ||
+                                !String(
+                                  answerMap[currentQuestion.code] ?? "",
+                                ).trim()
+                              }
+                              onClick={() =>
+                                void commitAnswer(
+                                  currentQuestion.code,
+                                  String(
+                                    answerMap[currentQuestion.code] ?? "",
+                                  ).trim(),
+                                )
+                              }
+                            >
+                              Save
+                            </Button>
+                          </div>
+                        )}
+                      </Can>
+
+                      <div className="flex justify-between border-t border-border pt-3">
                         <Button
                           type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={wizardIndex <= 0 || savingAnswer}
+                          onClick={() =>
+                            setWizardIndex((i) => Math.max(0, i - 1))
+                          }
+                        >
+                          Previous question
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
                           disabled={
-                            savingAnswer ||
-                            !String(answerMap[currentQuestion.code] ?? "").trim()
+                            wizardIndex >= visibleQuestions.length - 1 ||
+                            savingAnswer
                           }
                           onClick={() =>
-                            void commitAnswer(
-                              currentQuestion.code,
-                              String(
-                                answerMap[currentQuestion.code] ?? "",
-                              ).trim(),
+                            setWizardIndex((i) =>
+                              Math.min(visibleQuestions.length - 1, i + 1),
                             )
                           }
                         >
-                          Save
+                          Next question
                         </Button>
                       </div>
-                    )}
-                  </Can>
-
-                  <div className="flex justify-between border-t border-border pt-3">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={wizardIndex <= 0 || savingAnswer}
-                      onClick={() => setWizardIndex((i) => Math.max(0, i - 1))}
-                    >
-                      Previous question
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={
-                        wizardIndex >= visibleQuestions.length - 1 ||
-                        savingAnswer
-                      }
-                      onClick={() =>
-                        setWizardIndex((i) =>
-                          Math.min(visibleQuestions.length - 1, i + 1),
-                        )
-                      }
-                    >
-                      Next question
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-[13px] text-ink-3">Loading questions…</p>
+                    </div>
+                  ) : (
+                    <p className="text-[13px] text-ink-3">Loading questions…</p>
+                  )}
+                </>
               )}
 
               <div className="space-y-2">
@@ -872,6 +784,7 @@ export function AssessmentWizard({ assessmentId }: Props) {
                           type="button"
                           className="h-full w-full rounded-sm border border-border bg-surface px-3 py-2 text-left text-[12px] hover:bg-surface-2"
                           onClick={() => {
+                            setQuestionnaireMode("form");
                             const idx = visibleQuestions.findIndex(
                               (v) => v.code === q.code,
                             );
@@ -1016,14 +929,14 @@ export function AssessmentWizard({ assessmentId }: Props) {
             <div className="space-y-5">
               <p className="rounded-sm border border-border bg-surface-2/60 px-3 py-2 text-[12px] text-ink-2">
                 This is a <span className="font-medium text-ink">readiness score</span>,
-                not DPDP certification. PASS needs corroboration (CLI and/or
-                searchable policy text). FAIL controls open Violations and AUTO
-                remediation tasks so the assessment feeds the ops loop.
+                not DPDP certification. PASS is stronger with CLI scan evidence.
+                FAIL controls open Violations and AUTO remediation tasks so the
+                assessment feeds the ops loop.
               </p>
               <Can perm="assessment:evaluate">
                 <Button
                   type="button"
-                  disabled={evaluate.isPending || !docsComplete || !quizComplete}
+                  disabled={evaluate.isPending || !quizComplete}
                   onClick={async () => {
                     setActionError(null);
                     try {
@@ -1045,9 +958,9 @@ export function AssessmentWizard({ assessmentId }: Props) {
                   {evaluate.isPending ? "Evaluating…" : "Evaluate readiness"}
                 </Button>
               </Can>
-              {!docsComplete || !quizComplete ? (
+              {!quizComplete ? (
                 <p className="text-[12px] text-warn">
-                  Documents and questionnaire must be complete before evaluate.
+                  Complete required questionnaire answers before evaluate.
                 </p>
               ) : null}
 
@@ -1105,8 +1018,8 @@ export function AssessmentWizard({ assessmentId }: Props) {
                 </>
               ) : reportMissing ? (
                 <p className="text-[13px] text-ink-3">
-                  No readiness report yet — complete docs + questionnaire, prefer
-                  a CLI scan, then run Evaluate.
+                  No readiness report yet — complete the questionnaire, prefer a
+                  CLI scan, then run Evaluate.
                 </p>
               ) : (
                 <p className="text-[13px] text-ink-3">

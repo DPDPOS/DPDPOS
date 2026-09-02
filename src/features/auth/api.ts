@@ -5,7 +5,9 @@ import type {
   AuthTokens,
   LoginResult,
   LoginSuccessResult,
+  LookupOrganizationsResult,
   MfaSetupResult,
+  SignupInput,
 } from "./types";
 
 export interface LoginInput {
@@ -27,6 +29,15 @@ export interface AcceptInviteInput {
 }
 
 export const authApi = {
+  signup: (input: SignupInput) =>
+    api<LoginSuccessResult>("/auth/signup", { method: "POST", body: input }),
+
+  lookupOrganizations: (email: string) =>
+    api<LookupOrganizationsResult>("/auth/lookup-organizations", {
+      method: "POST",
+      body: { email },
+    }),
+
   login: (input: LoginInput) =>
     api<LoginResult>("/auth/login", { method: "POST", body: input }),
 

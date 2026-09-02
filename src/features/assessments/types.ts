@@ -121,6 +121,16 @@ export interface SaveAnswersPayload {
   answers: Array<{ questionCode: string; value: string | boolean | number | null }>;
 }
 
+export interface ImportQuestionnaireExcelPayload {
+  fileName?: string;
+  contentBase64: string;
+}
+
+export interface ImportQuestionnaireExcelResponse {
+  saved: number;
+  versionNumber: number;
+}
+
 export interface CliTokenResponse {
   id: string;
   token: string;

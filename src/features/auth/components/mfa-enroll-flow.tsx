@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api/errors";
 import { useSessionStore } from "@/state/session";
 import { authApi } from "../api";
-import type { MfaSetupResult } from "../types";
 import { authErrorMessage, applyFieldErrors } from "../error-utils";
+import { postAuthPath } from "../post-auth-path";
+import type { MfaSetupResult } from "../types";
 import { FormAlert } from "./form-alert";
 import { TotpQr } from "./totp-qr";
 import { AuthShell } from "./auth-shell";
@@ -20,6 +21,9 @@ type Phase = "setup" | "confirm" | "done";
 export function MfaEnrollFlow() {
   const router = useRouter();
   const status = useSessionStore((state) => state.status);
+  const user = useSessionStore((state) => state.user);
+
+  const continuePath = user ? postAuthPath(user) : "/dashboard";
 
   const [phase, setPhase] = useState<Phase>("setup");
   const [setup, setSetup] = useState<MfaSetupResult | null>(null);
@@ -100,7 +104,7 @@ export function MfaEnrollFlow() {
           Already enrolled?{" "}
           <button
             type="button"
-            onClick={() => router.replace("/dashboard")}
+            onClick={() => router.replace(continuePath)}
             className="focus-ring font-medium text-accent hover:text-accent-hover"
           >
             Skip for now
@@ -127,8 +131,8 @@ export function MfaEnrollFlow() {
               </p>
             </div>
           </div>
-          <Button className="w-full" onClick={() => router.replace("/dashboard")}>
-            Continue to dashboard
+          <Button className="w-full" onClick={() => router.replace(continuePath)}>
+            Continue
           </Button>
         </div>
       ) : phase === "confirm" && setup ? (

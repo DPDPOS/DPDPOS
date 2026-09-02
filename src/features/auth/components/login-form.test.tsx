@@ -26,11 +26,13 @@ async function fillLogin(
   },
 ) {
   const interaction = userEvent.setup();
-  await interaction.type(
-    screen.getByLabelText("Organization ID"),
-    DEMO_CREDENTIALS.organizationId,
-  );
   await interaction.type(screen.getByLabelText("Email"), user.email);
+  // Lookup prefills a single matching org; wait then set password.
+  await waitFor(() => {
+    expect(screen.getByLabelText("Organization ID")).toHaveValue(
+      DEMO_CREDENTIALS.organizationId,
+    );
+  });
   await interaction.type(screen.getByLabelText("Password"), user.password);
   return interaction;
 }
@@ -69,11 +71,17 @@ describe("LoginForm", () => {
 
   it("surfaces invalid-credential errors from the server", async () => {
     render(<LoginForm />);
-    const user = await fillLogin({
-      email: "nobody@example.com",
-      password: "WrongPass1!",
+    const interaction = userEvent.setup();
+    await interaction.type(screen.getByLabelText("Email"), "nobody@example.com");
+    await waitFor(() => {
+      expect(screen.getByText(/No organizations found/i)).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    await interaction.type(
+      screen.getByLabelText("Organization ID"),
+      DEMO_CREDENTIALS.organizationId,
+    );
+    await interaction.type(screen.getByLabelText("Password"), "WrongPass1!");
+    await interaction.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByText("Invalid email or password")).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();

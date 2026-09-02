@@ -7,6 +7,7 @@ import { FormAlert } from "@/features/auth/components/form-alert";
 import { RequireGuest } from "@/features/auth/components/require-guest";
 import { authApi } from "@/features/auth/api";
 import { authErrorMessage } from "@/features/auth/error-utils";
+import { postAuthPath } from "@/features/auth/post-auth-path";
 import type { LoginSuccessResult } from "@/features/auth/types";
 import { ApiError } from "@/lib/api/errors";
 import { useSessionStore } from "@/state/session";
@@ -47,12 +48,15 @@ function SsoExchangeInner() {
       try {
         const result = await exchangeOnce(exchange);
         useSessionStore.getState().markAuthenticated(result.tokens, result.user);
-        const next = result.mfaEnrollmentRequired ? "/mfa?step=enroll" : "/dashboard";
+        const next = result.mfaEnrollmentRequired
+          ? "/mfa?step=enroll"
+          : postAuthPath(result.user);
         router.replace(next);
       } catch (err) {
         if (!alive) return;
-        if (useSessionStore.getState().status === "authenticated") {
-          router.replace("/dashboard");
+        const session = useSessionStore.getState();
+        if (session.status === "authenticated") {
+          router.replace(session.user ? postAuthPath(session.user) : "/dashboard");
           return;
         }
         setBusy(false);

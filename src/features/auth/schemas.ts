@@ -23,6 +23,36 @@ export const loginSchema = z
   })
   .strict();
 
+export const signupSchema = z
+  .object({
+    organizationName: z
+      .string({ message: "Organization name is required" })
+      .trim()
+      .min(1, { message: "Organization name is required" })
+      .max(200),
+    adminName: z
+      .string({ message: "Your name is required" })
+      .trim()
+      .min(1, { message: "Your name is required" })
+      .max(200),
+    email: z
+      .string({ message: "Email is required" })
+      .trim()
+      .email({ message: "Enter a valid email address" })
+      .max(320),
+    password: z
+      .string({ message: "Password is required" })
+      .min(8, { message: "Use at least 8 characters" })
+      .max(200),
+    industry: z.string().max(120).optional(),
+    confirmPassword: z.string({ message: "Confirm your password" }).min(1),
+  })
+  .strict()
+  .refine((data) => data.password === data.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Passwords don't match",
+  });
+
 export const mfaVerifySchema = z
   .object({
     mfaToken: z.string().min(1),
@@ -77,5 +107,6 @@ export const refreshSchema = z
 export const logoutSchema = refreshSchema;
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
+export type SignupFormValues = z.infer<typeof signupSchema>;
 export type MfaCodeValues = Pick<z.infer<typeof mfaVerifySchema>, "code">;
 export type AcceptInviteFormValues = z.infer<typeof acceptInviteSchema>;

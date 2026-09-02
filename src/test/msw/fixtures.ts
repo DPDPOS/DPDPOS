@@ -41,6 +41,8 @@ export const testUser: AuthMeResponse = {
   permissions: ["users:create", "violations:create", "remediation:create"],
   mfaEnabled: true,
   mfaEnrollmentRequired: false,
+  onboardingCompleted: true,
+  requiresOnboarding: false,
 };
 
 export const testTokens: AuthTokens = {

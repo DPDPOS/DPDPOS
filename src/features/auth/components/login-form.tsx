@@ -1,22 +1,35 @@
 "use client";
 
+/**
+ * Login form with email → organization lookup.
+ * Org UUID can still be entered manually when lookup finds nothing.
+ */
+
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/errors";
 import { useSessionStore } from "@/state/session";
 import { authApi } from "../api";
 import { DEMO_AVAILABLE, DEMO_CREDENTIALS } from "../demo-credentials";
 import { authErrorMessage, applyFieldErrors } from "../error-utils";
 import { clearMfaChallenge, startMfaChallenge } from "../mfa-constants";
+import { postAuthPath } from "../post-auth-path";
 import { loginSchema, type LoginFormValues } from "../schemas";
+import type { LookupOrganization } from "../types";
 import { FormAlert } from "./form-alert";
 
 type IdentityOptions = Awaited<ReturnType<typeof authApi.identityOptions>>;
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
 
 export function LoginForm() {
   const router = useRouter();
@@ -30,6 +43,9 @@ export function LoginForm() {
   const [ldapMode, setLdapMode] = useState(false);
   const [ldapUsername, setLdapUsername] = useState("");
   const [ldapPassword, setLdapPassword] = useState("");
+  const [matchedOrgs, setMatchedOrgs] = useState<LookupOrganization[] | null>(null);
+  const [lookupEmail, setLookupEmail] = useState<string | null>(null);
+  const [lookupBusy, setLookupBusy] = useState(false);
 
   const {
     register,
@@ -44,6 +60,7 @@ export function LoginForm() {
   });
 
   const organizationId = useWatch({ control, name: "organizationId" });
+  const email = useWatch({ control, name: "email" });
   const normalizedOrganizationId = organizationId?.trim() ?? "";
   const activeIdentity =
     identity?.organizationId === normalizedOrganizationId ? identity.options : null;
@@ -70,8 +87,52 @@ export function LoginForm() {
     };
   }, [normalizedOrganizationId]);
 
+  useEffect(() => {
+    const trimmed = email?.trim() ?? "";
+    if (!trimmed || !isValidEmail(trimmed)) {
+      setMatchedOrgs(null);
+      setLookupEmail(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLookupBusy(true);
+    const timer = window.setTimeout(() => {
+      void authApi
+        .lookupOrganizations(trimmed)
+        .then((result) => {
+          if (cancelled) return;
+          setMatchedOrgs(result.organizations);
+          setLookupEmail(trimmed);
+          if (result.organizations.length === 1) {
+            setValue("organizationId", result.organizations[0].id, {
+              shouldValidate: true,
+            });
+          }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setMatchedOrgs(null);
+          setLookupEmail(trimmed);
+        })
+        .finally(() => {
+          if (!cancelled) setLookupBusy(false);
+        });
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      setLookupBusy(false);
+    };
+  }, [email, setValue]);
+
   const hidePassword =
     Boolean(activeIdentity?.enforceSso) && !activeIdentity?.allowLocalBreakGlass;
+
+  const showOrgPicker = Boolean(
+    matchedOrgs && matchedOrgs.length > 1 && lookupEmail === email?.trim(),
+  );
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitting(true);
@@ -86,7 +147,9 @@ export function LoginForm() {
       }
 
       useSessionStore.getState().markAuthenticated(result.tokens, result.user);
-      router.replace(result.mfaEnrollmentRequired ? "/mfa?step=enroll" : "/dashboard");
+      router.replace(
+        result.mfaEnrollmentRequired ? "/mfa?step=enroll" : postAuthPath(result.user),
+      );
     } catch (err) {
       if (err instanceof ApiError && err.code === "VALIDATION_ERROR") {
         applyFieldErrors(err, setError);
@@ -133,7 +196,9 @@ export function LoginForm() {
         password: ldapPassword,
       });
       useSessionStore.getState().markAuthenticated(result.tokens, result.user);
-      router.replace(result.mfaEnrollmentRequired ? "/mfa?step=enroll" : "/dashboard");
+      router.replace(
+        result.mfaEnrollmentRequired ? "/mfa?step=enroll" : postAuthPath(result.user),
+      );
     } catch (err) {
       if (err instanceof ApiError) setServerError(authErrorMessage(err));
       else setServerError("Directory sign-in failed.");
@@ -149,11 +214,61 @@ export function LoginForm() {
     setServerError(null);
   };
 
+  const emailRegister = register("email");
+
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-4">
       {serverError ? <FormAlert message={serverError} /> : null}
 
-      <Field label="Organization ID" htmlFor="organizationId" error={errors.organizationId?.message}>
+      <Field label="Email" htmlFor="email" error={errors.email?.message}>
+        <Input
+          id="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@company.in"
+          aria-invalid={errors.email ? true : undefined}
+          {...emailRegister}
+        />
+      </Field>
+
+      {showOrgPicker ? (
+        <Field
+          label="Organization"
+          htmlFor="organizationPicker"
+          hint="Multiple organizations match this email."
+        >
+          <Select
+            id="organizationPicker"
+            value={normalizedOrganizationId}
+            onChange={(event) => {
+              setValue("organizationId", event.target.value, { shouldValidate: true });
+            }}
+          >
+            <option value="">Select organization…</option>
+            {matchedOrgs!.map((org) => (
+              <option key={org.id} value={org.id}>
+                {org.name}
+                {org.onboardingCompleted ? "" : " (setup incomplete)"}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
+
+      <Field
+        label="Organization ID"
+        htmlFor="organizationId"
+        error={errors.organizationId?.message}
+        hint={
+          lookupBusy
+            ? "Looking up organizations…"
+            : matchedOrgs?.length === 1
+              ? `Matched ${matchedOrgs[0].name}`
+              : matchedOrgs?.length === 0
+                ? "No organizations found for this email — enter your UUID."
+                : "UUID, or pick from the list when multiple match."
+        }
+      >
         <Input
           id="organizationId"
           autoComplete="organization"
@@ -230,17 +345,6 @@ export function LoginForm() {
             </p>
           )}
 
-          <Field label="Email" htmlFor="email" error={errors.email?.message}>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@company.in"
-              aria-invalid={errors.email ? true : undefined}
-              {...register("email")}
-            />
-          </Field>
-
           <Field label="Password" htmlFor="password" error={errors.password?.message}>
             <Input
               id="password"
@@ -274,6 +378,13 @@ export function LoginForm() {
           Fill demo credentials
         </Button>
       ) : null}
+
+      <p className="text-center text-[13px] text-ink-2">
+        New organization?{" "}
+        <Link href="/signup" className="font-medium text-accent hover:underline">
+          Create an account
+        </Link>
+      </p>
     </form>
   );
 }

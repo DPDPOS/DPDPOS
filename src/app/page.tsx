@@ -4,14 +4,16 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { bootstrapSession } from "@/features/auth/session";
+import { postAuthPath } from "@/features/auth/post-auth-path";
 import { useSessionStore } from "@/state/session";
 
 /**
  * Entry point (plan §6.4): restore the session, then route to the dashboard
- * or the sign-in page. Never shows content — just a redirect.
+ * (or onboarding) or the sign-in page. Never shows content — just a redirect.
  */
 export default function RootPage() {
   const status = useSessionStore((state) => state.status);
+  const user = useSessionStore((state) => state.user);
   const router = useRouter();
 
   useEffect(() => {
@@ -19,9 +21,12 @@ export default function RootPage() {
   }, [status]);
 
   useEffect(() => {
-    if (status === "authenticated") router.replace("/dashboard");
-    else if (status === "unauthenticated") router.replace("/login");
-  }, [status, router]);
+    if (status === "authenticated") {
+      router.replace(user ? postAuthPath(user) : "/dashboard");
+    } else if (status === "unauthenticated") {
+      router.replace("/login");
+    }
+  }, [status, user, router]);
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-bg">

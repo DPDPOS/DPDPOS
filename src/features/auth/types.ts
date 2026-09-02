@@ -17,6 +17,28 @@ export interface AuthMeResponse {
   permissions: string[];
   mfaEnabled: boolean;
   mfaEnrollmentRequired: boolean;
+  /** True when the org has finished /onboarding/complete. */
+  onboardingCompleted: boolean;
+  /** Convenience for FE routing — same as !onboardingCompleted. */
+  requiresOnboarding: boolean;
+}
+
+export interface LookupOrganization {
+  id: string;
+  name: string;
+  onboardingCompleted: boolean;
+}
+
+export interface LookupOrganizationsResult {
+  organizations: LookupOrganization[];
+}
+
+export interface SignupInput {
+  organizationName: string;
+  adminName: string;
+  email: string;
+  password: string;
+  industry?: string;
 }
 
 export interface LoginSuccessResult {

@@ -57,9 +57,8 @@ export function AssessmentsView() {
         <div>
           <h1 className="text-lg font-semibold text-ink">Assessments</h1>
           <p className="mt-0.5 max-w-2xl text-[13px] text-ink-2">
-            Full-page onboarding: upload policies → questionnaire → CLI scan →
-            evaluate → version. Open a row to continue from the first incomplete
-            step.
+            Full-page onboarding: questionnaire → CLI scan → evaluate →
+            version. Open a row to continue from the first incomplete step.
           </p>
         </div>
         <Can perm="assessment:create">
