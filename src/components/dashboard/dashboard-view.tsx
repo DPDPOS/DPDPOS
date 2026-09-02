@@ -398,8 +398,7 @@ function DashboardBody({
           <CardBody className="space-y-4">
             {complianceScore.totalRules === 0 ? (
               <p className="text-[13px] text-ink-3">
-                No completed validation runs yet. Trigger a run from the
-                Validations section in Phase 3.
+                No completed validation runs yet. Trigger a run from Validations.
               </p>
             ) : (
               <>
@@ -493,7 +492,7 @@ function ReducedDashboard({
   return (
     <div className="space-y-6">
       <header>
-        <p className="micro-label">Workspace</p>
+        <p className="micro-label">Compliance overview</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
           Dashboard
         </h1>
@@ -511,7 +510,6 @@ function ReducedDashboard({
           <CardBody className="space-y-3">
             <Row label="Name" value={user?.name ?? "—"} />
             <Row label="Email" value={user?.email ?? "—"} mono />
-            <Row label="Organization" value={user?.organizationId ?? "—"} mono />
             <div className="flex items-center justify-between gap-3">
               <span className="text-[13px] text-ink-2">MFA</span>
               <span

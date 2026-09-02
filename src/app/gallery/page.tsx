@@ -87,7 +87,7 @@ export default function GalleryPage() {
       {/* Header ------------------------------------------------------------- */}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="micro-label">DPDPOS · Design system · Phase 0</p>
+          <p className="micro-label">DPDPOS · Design system</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">
             Component gallery
           </h1>

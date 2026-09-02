@@ -5,8 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   accessibleRoutes,
-  CURRENT_PHASE,
-  isRouteLive,
   NAV_GROUPS,
   type AppRoute,
 } from "@/lib/navigation/routes";
@@ -15,10 +13,9 @@ import { useUiStore } from "@/state/ui";
 import { cn } from "@/lib/utils/cn";
 
 /**
- * Sidebar (plan §5.3) — 224px, collapsible to 64px icons on desktop, an
- * off-canvas drawer on mobile. Groups and items mirror the route map; an item
- * is hidden without its read permission and rendered disabled with a phase
- * chip while its screen is still ahead in the build plan.
+ * Sidebar — 224px, collapsible to 64px icons on desktop, an off-canvas drawer
+ * on mobile. Groups and items mirror the route map; an item is hidden without
+ * its read permission.
  */
 export function Sidebar() {
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
@@ -38,7 +35,6 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile overlay ------------------------------------------------------ */}
       {mobileOpen ? (
         <button
           type="button"
@@ -55,7 +51,6 @@ export function Sidebar() {
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        {/* Identity ----------------------------------------------------------- */}
         <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-3">
           <Link
             href="/dashboard"
@@ -76,28 +71,6 @@ export function Sidebar() {
           </Link>
         </div>
 
-        {/* Workspace ---------------------------------------------------------- */}
-        <div
-          className={cn(
-            "flex shrink-0 items-center border-b border-border px-3 py-2.5",
-            collapsed ? "justify-center" : "gap-2",
-          )}
-          title={user?.organizationId}
-        >
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-sm border border-border bg-surface-2 text-ink-3">
-            <span className="size-1.5 rounded-full bg-pass" aria-hidden />
-          </div>
-          {!collapsed ? (
-            <div className="min-w-0 leading-tight">
-              <p className="micro-label">Workspace</p>
-              <p className="truncate font-mono text-[11px] text-ink-2">
-                {user?.organizationId ?? "—"}
-              </p>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Nav ------------------------------------------------------------------ */}
         <nav
           className="flex-1 space-y-5 overflow-y-auto px-2 py-4"
           aria-label="Primary"
@@ -124,15 +97,6 @@ export function Sidebar() {
             </div>
           ))}
         </nav>
-
-        {/* Footer ---------------------------------------------------------------- */}
-        <div className="shrink-0 border-t border-border p-2">
-          {!collapsed ? (
-            <p className="micro-label px-2 py-2 text-ink-3">
-              Phase {CURRENT_PHASE} · shell + dashboard
-            </p>
-          ) : null}
-        </div>
       </aside>
     </>
   );
@@ -147,46 +111,13 @@ interface NavItemProps {
 
 function NavItem({ route, active, collapsed, onNavigate }: NavItemProps) {
   const Icon = route.icon;
-  const live = isRouteLive(route);
-  const chip = !live
-    ? route.phase > CURRENT_PHASE
-      ? `P${route.phase}`
-      : "Soon"
-    : null;
   const classes = cn(
     "group relative flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-[13px] transition-colors duration-150",
     collapsed && "justify-center px-0",
-    !live
-      ? "cursor-not-allowed text-ink-3"
-      : active
-        ? "font-medium text-ink"
-        : "text-ink-2 hover:bg-surface-2 hover:text-ink",
+    active
+      ? "font-medium text-ink"
+      : "text-ink-2 hover:bg-surface-2 hover:text-ink",
   );
-
-  if (!live) {
-    return (
-      <div
-        className={classes}
-        aria-disabled="true"
-        title={`${route.label} — arriving in Phase ${route.phase}`}
-      >
-        <Icon className="size-4 shrink-0" aria-hidden />
-        {!collapsed ? (
-          <>
-            <span className="truncate">{route.label}</span>
-            <span
-              className={cn(
-                "ml-auto shrink-0 rounded-sm border border-border px-1 font-mono text-[10px] uppercase text-ink-3",
-                active && "border-border-strong",
-              )}
-            >
-              {chip}
-            </span>
-          </>
-        ) : null}
-      </div>
-    );
-  }
 
   return (
     <Link

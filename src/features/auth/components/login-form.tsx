@@ -157,7 +157,7 @@ export function LoginForm() {
         <Input
           id="organizationId"
           autoComplete="organization"
-          placeholder="00000000-0000-4000-8000-000000000001"
+          placeholder="Your organization UUID"
           aria-invalid={errors.organizationId ? true : undefined}
           {...register("organizationId")}
         />

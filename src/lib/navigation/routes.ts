@@ -25,11 +25,9 @@ import {
 } from "lucide-react";
 
 /**
- * Route map — single source of truth for navigation (plan §5.2/§5.3).
+ * Route map — single source of truth for navigation.
  * `permission` mirrors the backend catalog (shared/constants/permissions.ts);
- * the sidebar shows an item only when the user holds it. `phase` marks which
- * build phase ships the screen — later-phase items render disabled with a
- * phase chip instead of silently 404ing.
+ * the sidebar shows an item only when the user holds it and the screen is shipped.
  */
 export type NavGroup =
   | "Overview"
@@ -48,20 +46,20 @@ export interface AppRoute {
   icon: LucideIcon;
   /** Read permission from the backend catalog; absent = any authenticated user. */
   permission?: string;
-  /** Build phase that ships the screen (1 = shipped with Phase 1 shell). */
+  /** Internal build phase marker (not shown in UI). */
   phase: number;
-  /** Screen exists in the current build — false keeps the item disabled. */
+  /** Screen exists and is linked in navigation. */
   shipped?: boolean;
   /** Match pathname prefix instead of exact equality. */
   prefixMatch?: boolean;
 }
 
-/** True when the route's screen exists and is reachable at this build phase. */
+/** True when the route's screen exists and should appear in navigation. */
 export function isRouteLive(route: AppRoute): boolean {
-  return Boolean(route.shipped) && route.phase <= CURRENT_PHASE;
+  return Boolean(route.shipped);
 }
 
-/** Build phase shipped so far — later-phase nav items render disabled. */
+/** @deprecated Kept for tests/docs — UI no longer surfaces build phases. */
 export const CURRENT_PHASE = 10;
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -336,18 +334,15 @@ export const APP_ROUTES: AppRoute[] = [
 ];
 
 /**
- * Routes the user may *see* in navigation, filtered by read permission (§6.4).
- * Later-phase items stay in the list — the sidebar renders them disabled with
- * a phase chip, so the information architecture is visible before the screen
- * exists. `maxPhase` lets callers trim to a specific build horizon.
+ * Routes the user may see in navigation: shipped screens filtered by read
+ * permission. Unshipped routes stay out of the nav and search palette.
  */
 export function accessibleRoutes(
   permissions: string[] | undefined,
-  maxPhase = Number.POSITIVE_INFINITY,
 ): AppRoute[] {
   return APP_ROUTES.filter(
     (route) =>
-      route.phase <= maxPhase &&
+      Boolean(route.shipped) &&
       (!route.permission || permissions?.includes(route.permission)),
   );
 }

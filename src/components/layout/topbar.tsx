@@ -26,8 +26,6 @@ import {
 import { formatDateTime } from "@/lib/utils/format";
 import {
   accessibleRoutes,
-  CURRENT_PHASE,
-  isRouteLive,
   routeForPathname,
 } from "@/lib/navigation/routes";
 import { useSessionStore } from "@/state/session";
@@ -39,8 +37,7 @@ type Panel = "none" | "search" | "bell" | "user";
 /**
  * Topbar (plan §5.3): breadcrumbs, global search (`/` or ⌘K focuses it),
  * notification bell polling `/notifications/unread-count` every 60 s, and the
- * user menu. The search surface is wired to the route map already — results
- * link when the screen exists and show a phase chip when it is upcoming.
+ * user menu. Search is wired to the shipped route map the user can access.
  */
 export function Topbar() {
   const pathname = usePathname();
@@ -148,7 +145,7 @@ export function Topbar() {
           </span>
           <ChevronRight className="size-3 text-ink-3" aria-hidden />
           <span className="truncate font-medium text-ink">
-            {route ? route.label : "Workspace"}
+            {route ? route.label : "Overview"}
           </span>
         </div>
 
@@ -190,35 +187,19 @@ export function Topbar() {
                   const Icon = result.icon;
                   return (
                     <li key={result.href}>
-              {!isRouteLive(result) ? (
-                <div
-                  aria-disabled="true"
-                  className="flex cursor-not-allowed items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] text-ink-3"
-                  title={`${result.label} — arriving in Phase ${result.phase}`}
-                >
-                  <Icon className="size-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">
-                    {result.label}
-                  </span>
-                  <span className="shrink-0 rounded-sm border border-border px-1 font-mono text-[10px] uppercase text-ink-3">
-                    {result.phase > CURRENT_PHASE ? `P${result.phase}` : "Soon"}
-                  </span>
-                </div>
-              ) : (
-                        <Link
-                          href={result.href}
-                          onClick={close}
-                          className="flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
-                        >
-                          <Icon className="size-4 shrink-0" aria-hidden />
-                          <span className="min-w-0 flex-1 truncate">
-                            {result.label}
-                          </span>
-                          <span className="micro-label shrink-0 text-ink-3">
-                            {result.group}
-                          </span>
-                        </Link>
-                      )}
+                      <Link
+                        href={result.href}
+                        onClick={close}
+                        className="flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+                      >
+                        <Icon className="size-4 shrink-0" aria-hidden />
+                        <span className="min-w-0 flex-1 truncate">
+                          {result.label}
+                        </span>
+                        <span className="micro-label shrink-0 text-ink-3">
+                          {result.group}
+                        </span>
+                      </Link>
                     </li>
                   );
                 })}

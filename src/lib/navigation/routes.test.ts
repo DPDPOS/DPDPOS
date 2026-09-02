@@ -35,11 +35,12 @@ describe("route map permission gating (§5.2/§6.4)", () => {
     expect(routes.map((r) => r.href)).toEqual(["/dashboard"]);
   });
 
-  it("exposes every planned route to a fully-privileged user", () => {
+  it("exposes shipped routes to a fully-privileged user", () => {
     const routes = accessibleRoutes(ALL_PERMISSIONS);
-    expect(routes.length).toBeGreaterThanOrEqual(ALL_PERMISSIONS.length);
+    expect(routes.length).toBeGreaterThanOrEqual(20);
     expect(routes.map((r) => r.href)).toContain("/controls");
     expect(routes.map((r) => r.href)).toContain("/framework/roadmap");
+    expect(routes.map((r) => r.href)).not.toContain("/ai");
   });
 
   it("filters by the exact backend permission string", () => {
@@ -51,12 +52,9 @@ describe("route map permission gating (§5.2/§6.4)", () => {
     expect(hrefs).not.toContain("/evidence");
   });
 
-  it("respects a build-phase horizon", () => {
-    const routes = accessibleRoutes(ALL_PERMISSIONS, 3);
-    const hrefs = routes.map((r) => r.href);
-    expect(hrefs).toContain("/controls"); // phase 3
-    expect(hrefs).not.toContain("/inventory"); // phase 4
-    expect(hrefs).not.toContain("/evidence"); // phase 5
+  it("omits unshipped routes from navigation", () => {
+    const routes = accessibleRoutes(ALL_PERMISSIONS);
+    expect(routes.every((r) => r.shipped)).toBe(true);
   });
 
   it("canAccessRoute gates direct URLs", () => {

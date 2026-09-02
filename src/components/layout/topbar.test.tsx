@@ -111,9 +111,9 @@ describe("Topbar", () => {
     const input = screen.getByLabelText("Search pages");
     expect(input).toBeInTheDocument();
 
-    await userEvent.type(input, "ai");
-    expect(await screen.findByText("AI assistant")).toBeInTheDocument();
-    // AI assistant is a future phase (not shipped) → "Soon" chip.
-    expect(screen.getByText("Soon")).toBeInTheDocument();
+    await userEvent.type(input, "obligation");
+    expect(await screen.findByRole("link", { name: /Obligations/i })).toBeInTheDocument();
+    expect(screen.queryByText("Soon")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI assistant")).not.toBeInTheDocument();
   });
 });
