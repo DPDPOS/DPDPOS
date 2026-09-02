@@ -12,14 +12,28 @@ import type {
 /**
  * Evidence API — mirrors dpdpos_backend/src/modules/evidence/routes/evidence.routes.ts
  * exactly, including the oddities: the list endpoint returns the paged shape
- * with envelope `meta.pagination` (normalized by apiList), and the export pack returns a job id
- * with no status-poll endpoint exposed (§9.10).
+ * with envelope `meta.pagination` (normalized by apiList), and the export pack
+ * queues an EVIDENCE_REPORT (trackable in the report center).
  */
 export const evidenceApi = {
   list: (query: EvidenceListQuery) =>
     apiClient.list<EvidenceFileRecord>("/evidence", query),
 
-  get: (id: string) => apiClient.get<EvidenceFileRecord>(`/evidence/${id}`),
+  get: async (id: string) => {
+    const data = await apiClient.get<
+      EvidenceFileRecord | { evidence: EvidenceFileRecord; downloadUrl?: string }
+    >(`/evidence/${id}`);
+    // Backend historically nested `{ evidence, downloadUrl }`; normalize either shape.
+    if (data && typeof data === "object" && "evidence" in data && data.evidence) {
+      return {
+        ...data.evidence,
+        tags: data.evidence.tags ?? [],
+        downloadUrl: data.downloadUrl,
+      };
+    }
+    const record = data as EvidenceFileRecord;
+    return { ...record, tags: record.tags ?? [] };
+  },
 
   /** Presigned pipeline step 1 — creates the record + returns a PUT url. */
   initiateUpload: (body: CreateEvidencePayload) =>

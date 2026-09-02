@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Check,
   Download,
+  Eye,
   FileUp,
   Lock,
   LockKeyhole,
@@ -328,9 +329,15 @@ export function EvidenceView() {
   );
 }
 
-/* Upload drawer — the presigned pipeline (§10.2) ----------------------------- */
+/* Upload drawer — the presigned pipeline (§10.2), multi-file ----------------- */
 
-type UploadStep = "idle" | "initiating" | "putting" | "confirming";
+type UploadStep = "idle" | "uploading";
+
+type FileProgress = {
+  name: string;
+  status: "pending" | "uploading" | "done" | "error";
+  error?: string;
+};
 
 function UploadEvidenceDrawer({
   open,
@@ -343,7 +350,8 @@ function UploadEvidenceDrawer({
   const confirm = useConfirmUpload();
   const controls = useControls({ page: 1, pageSize: 100 });
 
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [progress, setProgress] = useState<FileProgress[]>([]);
   const [step, setStep] = useState<UploadStep>("idle");
   const [stepError, setStepError] = useState<string | null>(null);
 
@@ -361,47 +369,81 @@ function UploadEvidenceDrawer({
   const busy = step !== "idle";
 
   const submit = handleSubmit(async (values) => {
-    if (!file) {
-      setStepError("Pick a file first.");
+    if (files.length === 0) {
+      setStepError("Pick at least one file.");
       return;
     }
     setStepError(null);
-    try {
-      setStep("initiating");
-      const { evidence, uploadUrl } = await initiate.mutateAsync({
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        description: values.description?.trim() || undefined,
-        controlId: values.controlId || undefined,
-        tags: parseTags(values.tagsInput),
-      });
+    setStep("uploading");
+    setProgress(files.map((f) => ({ name: f.name, status: "pending" })));
 
-      setStep("putting");
-      const put = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
-      });
-      if (!put.ok) throw new Error(`Upload to storage failed (HTTP ${put.status})`);
+    const tags = parseTags(values.tagsInput);
+    const description = values.description?.trim() || undefined;
+    const controlId = values.controlId || undefined;
+    let failures = 0;
 
-      setStep("confirming");
-      const hash = await sha256Hex(file);
-      await confirm.mutateAsync({
-        id: evidence.id,
-        fileHash: hash,
-        fileSizeBytes: file.size,
-      });
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setProgress((prev) =>
+        prev.map((p, idx) =>
+          idx === i ? { ...p, status: "uploading" } : p,
+        ),
+      );
+      try {
+        const { evidence, uploadUrl } = await initiate.mutateAsync({
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          description,
+          controlId,
+          tags,
+        });
 
-      // Close through the raw prop — the user-initiated close handler below
-      // guards on step state, which would still read the in-flight step here.
-      setStep("idle");
+        const put = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+        if (!put.ok) throw new Error(`Storage upload failed (HTTP ${put.status})`);
+
+        const hash = await sha256Hex(file);
+        await confirm.mutateAsync({
+          id: evidence.id,
+          fileHash: hash,
+          fileSizeBytes: file.size,
+        });
+
+        setProgress((prev) =>
+          prev.map((p, idx) => (idx === i ? { ...p, status: "done" } : p)),
+        );
+      } catch (error) {
+        failures += 1;
+        setProgress((prev) =>
+          prev.map((p, idx) =>
+            idx === i
+              ? {
+                  ...p,
+                  status: "error",
+                  error:
+                    error instanceof Error ? error.message : "Upload failed",
+                }
+              : p,
+          ),
+        );
+      }
+    }
+
+    setStep("idle");
+    if (failures === 0) {
       reset();
-      setFile(null);
+      setFiles([]);
+      setProgress([]);
       onClose();
-    } catch (error) {
-      setStep("idle");
+    } else {
       setStepError(
-        error instanceof Error ? error.message : "Upload failed — try again.",
+        `${failures} of ${files.length} file${files.length === 1 ? "" : "s"} failed. Successful uploads are already in the vault.`,
+      );
+      setFiles((prev) =>
+        prev.filter((_, idx) => progress[idx]?.status === "error" || true),
       );
     }
   });
@@ -409,65 +451,88 @@ function UploadEvidenceDrawer({
   return (
     <Drawer
       open={open}
-      // User-initiated closes (overlay, X, Escape) are blocked mid-upload so
-      // a half-sent record never looks finished; the success path calls the
-      // raw onClose above.
       onClose={() => {
         if (step === "idle") onClose();
       }}
       title="Upload evidence"
-      description="Initiate a presigned upload, send the object, and confirm its hash."
+      description="Select one or more files. Shared description, control and tags apply to every file."
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} disabled={busy || !file}>
-            {step === "initiating"
-              ? "Initiating…"
-              : step === "putting"
-                ? "Uploading…"
-                : step === "confirming"
-                  ? "Verifying hash…"
-                  : "Upload file"}
+          <Button onClick={() => void submit()} disabled={busy || files.length === 0}>
+            {busy
+              ? `Uploading ${progress.filter((p) => p.status === "done").length + 1}/${files.length}…`
+              : files.length > 1
+                ? `Upload ${files.length} files`
+                : "Upload file"}
           </Button>
         </>
       }
     >
       <form id="evidence-upload-form" onSubmit={submit} noValidate className="space-y-4">
         <Field
-          label="File"
+          label="Files"
           htmlFor="ev-file"
-          hint="PDFs, spreadsheets, screenshots — anything you can point at as proof."
+          hint="PDFs, spreadsheets, screenshots — multi-select supported."
           error={stepError ?? undefined}
         >
           <label
             htmlFor="ev-file"
             className={cn(
-              "flex h-24 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-sm border border-dashed transition-colors",
-              file
+              "flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-sm border border-dashed px-3 py-4 transition-colors",
+              files.length
                 ? "border-pass/40 bg-pass-bg/30"
                 : "border-border-strong bg-surface hover:border-accent/50",
             )}
           >
             <FileUp className="size-5 text-ink-3" aria-hidden />
-            {file ? (
-              <span className="max-w-full truncate px-3 font-mono text-xs font-medium text-ink">
-                {file.name}
+            {files.length ? (
+              <span className="text-xs font-medium text-ink">
+                {files.length} file{files.length === 1 ? "" : "s"} selected
               </span>
             ) : (
-              <span className="text-xs text-ink-2">Click to choose a file</span>
+              <span className="text-xs text-ink-2">Click to choose files</span>
             )}
           </label>
           <input
             id="ev-file"
             type="file"
+            multiple
             className="sr-only"
             onChange={(event) => {
-              setFile(event.target.files?.[0] ?? null);
+              setFiles(Array.from(event.target.files ?? []));
+              setProgress([]);
               setStepError(null);
             }}
           />
+          {files.length > 0 ? (
+            <ul className="mt-2 space-y-1">
+              {files.map((file, idx) => {
+                const row = progress[idx];
+                return (
+                  <li
+                    key={`${file.name}-${idx}`}
+                    className="flex items-center justify-between gap-2 rounded-sm border border-border bg-surface px-2 py-1.5"
+                  >
+                    <span className="min-w-0 truncate font-mono text-[11px] text-ink">
+                      {file.name}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-ink-3">
+                      {row?.status === "uploading"
+                        ? "Uploading…"
+                        : row?.status === "done"
+                          ? "Done"
+                          : row?.status === "error"
+                            ? "Failed"
+                            : formatFileSize(file.size)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
         </Field>
 
         <Field label="Description" htmlFor="ev-desc" error={errors.description?.message}>
@@ -535,12 +600,20 @@ function EvidenceDetailDrawer({
   const [mapping, setMapping] = useState(false);
   const [confirming, setConfirming] = useState<"approve" | "lock" | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   if (!record) return null;
 
   const control = record.controlId
     ? controls.data?.items.find((item) => item.id === record.controlId)
     : undefined;
+
+  const canPreview =
+    record.mimeType.startsWith("image/") ||
+    record.mimeType === "application/pdf" ||
+    record.mimeType.startsWith("text/");
 
   const download = async () => {
     setDownloadError(null);
@@ -549,6 +622,24 @@ function EvidenceDetailDrawer({
       window.open(downloadUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : "Download failed.");
+    }
+  };
+
+  const openPreview = async () => {
+    setDownloadError(null);
+    setPreviewLoading(true);
+    try {
+      const url =
+        record.downloadUrl ??
+        (await evidenceDownload(record.id)).downloadUrl;
+      setPreviewUrl(url);
+      setPreviewOpen(true);
+    } catch (error) {
+      setDownloadError(
+        error instanceof Error ? error.message : "Preview failed.",
+      );
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -566,6 +657,16 @@ function EvidenceDetailDrawer({
           </Button>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <Can perm="evidence:read">
+              {canPreview ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => void openPreview()}
+                  disabled={previewLoading}
+                >
+                  <Eye className="size-3.5" aria-hidden />
+                  {previewLoading ? "Loading…" : "View"}
+                </Button>
+              ) : null}
               <Button variant="secondary" onClick={() => void download()}>
                 <Download className="size-3.5" aria-hidden />
                 Download
@@ -699,15 +800,18 @@ function EvidenceDetailDrawer({
           <Meta label="Approved by" value={userName(record.approvedBy)} />
           <Meta label="Locked at" value={record.lockedAt ? formatDate(record.lockedAt) : "—"} />
           <Meta
+            label="Retention expires"
+            value={record.expiresAt ? formatDate(record.expiresAt) : "—"}
+          />
+          <Meta
             label="Tags"
-            value={record.tags.length ? record.tags.join(", ") : "—"}
+            value={(record.tags?.length ?? 0) ? record.tags!.join(", ") : "—"}
           />
         </section>
 
         {/* Trace footer ------------------------------------------------------ */}
         <p className="border-t border-border pt-3 font-mono text-[11px] leading-relaxed text-ink-3">
           {record.id.slice(0, 8)} · updated {formatDate(record.updatedAt)}
-          {record.expiresAt ? ` · url expires ${formatDate(record.expiresAt)}` : ""}
         </p>
       </div>
 
@@ -736,6 +840,41 @@ function EvidenceDetailDrawer({
         }}
         error={approveMutation.error ?? lockMutation.error}
       />
+      <Dialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title={record.fileName}
+        description="In-app preview — download for the original file."
+        className="max-w-3xl"
+        footer={
+          <Button variant="ghost" onClick={() => setPreviewOpen(false)}>
+            Close
+          </Button>
+        }
+      >
+        {previewUrl && record.mimeType.startsWith("image/") ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={previewUrl}
+            alt={record.fileName}
+            className="max-h-[70vh] w-full object-contain"
+          />
+        ) : previewUrl && record.mimeType === "application/pdf" ? (
+          <iframe
+            title={record.fileName}
+            src={previewUrl}
+            className="h-[70vh] w-full rounded-sm border border-border"
+          />
+        ) : previewUrl ? (
+          <iframe
+            title={record.fileName}
+            src={previewUrl}
+            className="h-[50vh] w-full rounded-sm border border-border bg-surface"
+          />
+        ) : (
+          <p className="text-sm text-ink-2">Preview unavailable.</p>
+        )}
+      </Dialog>
     </Drawer>
   );
 }
@@ -1024,9 +1163,9 @@ function ExportEvidenceDialog({
           <p className="flex items-start gap-2 rounded-sm border border-pass/20 bg-pass-bg/40 px-3 py-2 text-[13px] leading-relaxed text-ink-2">
             <Unlock className="mt-0.5 size-3.5 shrink-0 text-pass" aria-hidden />
             Export job{" "}
-            <span className="font-mono text-ink">{result.jobId}</span> is queued.
-            The worker assembles the pack asynchronously — completed exports
-            surface in the report center.
+            <span className="font-mono text-ink">{result.jobId}</span> is queued
+            as an evidence report. Open the report center to watch status and
+            download the file when it completes.
           </p>
         </div>
       ) : (
@@ -1045,8 +1184,8 @@ function ExportEvidenceDialog({
           )}
           </p>
           <p className="rounded-sm border border-warn/20 bg-warn-bg/40 px-3 py-2 text-xs leading-relaxed text-ink-2">
-            This action is audited. The export API returns a job id — there is
-            no status endpoint, so completion is tracked through the report center.
+            This action is audited. The export creates a report job you can
+            track and download from the report center.
           </p>
           {error ? (
             <p role="alert" className="rounded-sm border border-fail/20 bg-fail-bg/50 px-3 py-2 text-xs text-fail">

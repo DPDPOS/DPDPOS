@@ -6,6 +6,8 @@ export interface AuditLogRecord {
   actionType: string;
   entityType: string | null;
   entityId: string | null;
+  /** Human-readable explanation of the event (from audit catalog). */
+  description?: string;
   beforeJson: unknown | null;
   afterJson: unknown | null;
   ipAddress: string | null;

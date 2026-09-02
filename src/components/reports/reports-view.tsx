@@ -313,6 +313,7 @@ function DownloadReportButton({ row }: { row: ReportRecord }) {
         setState("loading");
         try {
           const { downloadUrl } = await reportsApi.download(row.id);
+          if (!downloadUrl) throw new Error("Missing download URL");
           window.open(downloadUrl, "_blank", "noopener,noreferrer");
           setState("idle");
         } catch {
@@ -352,7 +353,7 @@ function GenerateReportDialog({
     defaultValues: {
       reportType: presetType ?? "BOARD_PACK",
       title: "",
-      format: "CSV",
+      format: "PDF",
       dateFrom: "",
       dateTo: "",
     },

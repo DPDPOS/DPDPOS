@@ -20,14 +20,11 @@ export function useFrameworkRoadmap(enabled = true) {
 }
 
 export function useGenerateFramework() {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: GenerateFrameworkPayload) =>
       frameworkApi.generate(body),
-    onSuccess: () => {
-      // A new draft supersedes the previous latest framework + roadmap.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.framework() });
-    },
+    // Do not invalidate here: invalidating mid-wizard remounts FrameworkView
+    // from empty → board and interrupts the preview step. Refresh on close/publish.
   });
 }
 

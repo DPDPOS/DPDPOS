@@ -117,6 +117,7 @@ function ProgrammeBoard({
 }) {
   const roadmap = framework.roadmapJson;
   const isDraft = framework.status === "DRAFT";
+  const summary = roadmap?.summary;
 
   return (
     <>
@@ -168,22 +169,22 @@ function ProgrammeBoard({
         </div>
       </header>
 
-      {roadmap ? (
+      {summary ? (
         <div className="grid gap-4 sm:grid-cols-3">
           <SummaryStat
             icon={Layers}
             label="Controls"
-            value={roadmap.summary.controlCount}
+            value={summary.controlCount}
           />
           <SummaryStat
             icon={Sparkles}
             label="Obligations"
-            value={roadmap.summary.requirementCount}
+            value={summary.requirementCount}
           />
           <SummaryStat
             icon={CalendarPlus}
             label="Roadmap phases"
-            value={roadmap.summary.phaseCount}
+            value={summary.phaseCount}
           />
         </div>
       ) : null}

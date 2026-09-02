@@ -25,8 +25,10 @@ export interface EvidenceFileRecord {
   fileHash: string | null;
   fileSizeBytes: number | null;
   description: string | null;
-  tags: string[];
+  tags?: string[] | null;
   status: EvidenceStatus;
+  /** Present on get-by-id responses. */
+  downloadUrl?: string;
   controlId: string | null;
   violationId: string | null;
   uploadedBy: string | null;
@@ -107,5 +109,7 @@ export interface EvidenceExportPayload {
 
 export interface EvidenceExportResult {
   jobId: string;
+  /** Report center id — same as jobId after export was routed through reports. */
+  reportId?: string;
   status: "PENDING";
 }

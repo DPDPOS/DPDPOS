@@ -9,8 +9,9 @@ export type DataSensitivity = "low" | "medium" | "high";
 export type RoadmapPhaseName =
   | "Foundation"
   | "Operations"
-  | "Oversight"
-  | "Significant Fiduciary";
+  | "Governance"
+  | "Oversight" // legacy snapshots
+  | "Significant Fiduciary"; // legacy SDF-as-phase snapshots
 
 export interface FrameworkProfile {
   industryProfile: string;

@@ -19,6 +19,8 @@ import {
 import type { FrameworkResponse } from "@/features/framework/types";
 import { formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
+import { queryKeys } from "@/lib/api/queryKeys";
+import { useQueryClient } from "@tanstack/react-query";
 import { RoadmapPhases } from "./roadmap-phases";
 
 const INDUSTRY_SUGGESTIONS = [
@@ -49,6 +51,7 @@ export interface FrameworkWizardProps {
  */
 export function FrameworkWizard({ open, onClose, mode }: FrameworkWizardProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>("profile");
   const [generated, setGenerated] = useState<FrameworkResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +78,9 @@ export function FrameworkWizard({ open, onClose, mode }: FrameworkWizardProps) {
 
   const close = () => {
     onClose();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.framework() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.controls() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.requirements() });
     // Reset for next open.
     window.setTimeout(() => {
       setStep("profile");
@@ -113,7 +119,7 @@ export function FrameworkWizard({ open, onClose, mode }: FrameworkWizardProps) {
     }
   };
 
-  const roadmap = generated?.roadmapJson;
+  const roadmap = normalizeRoadmap(generated);
 
   return (
     <Dialog
@@ -299,7 +305,7 @@ export function FrameworkWizard({ open, onClose, mode }: FrameworkWizardProps) {
                   <span className="mt-0.5 block text-xs leading-relaxed text-ink-2">
                     SDFs carry stricter duties under DPDP Act s.10 — appoint a DPO,
                     run independent data audits, and perform DPIAs for high-risk
-                    processing. This adds the Significant Fiduciary phase.
+                    processing. This adds Significant Fiduciary overlay controls.
                   </span>
                 </span>
               </label>
@@ -324,7 +330,7 @@ export function FrameworkWizard({ open, onClose, mode }: FrameworkWizardProps) {
         </form>
       ) : null}
 
-      {step === "preview" && generated && roadmap ? (
+      {step === "preview" && generated ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-sm border border-accent/20 bg-accent-soft px-2 py-1 text-xs font-medium text-accent">
@@ -332,15 +338,21 @@ export function FrameworkWizard({ open, onClose, mode }: FrameworkWizardProps) {
               Draft generated
             </span>
             <span className="micro-label text-ink-3">
-              {roadmap.summary.controlCount} controls ·{" "}
-              {roadmap.summary.requirementCount} obligations ·{" "}
-              {roadmap.summary.phaseCount} phases · generated{" "}
-              {formatDate(roadmap.generatedAt)}
+              {roadmap
+                ? `${roadmap.summary.controlCount} controls · ${roadmap.summary.requirementCount} obligations · ${roadmap.summary.phaseCount} phases · generated ${formatDate(roadmap.generatedAt)}`
+                : `${generated.controls.length} controls · ${generated.requirements.length} obligations`}
             </span>
           </div>
 
           <div className="max-h-80 overflow-y-auto pr-1">
-            <RoadmapPhases roadmap={roadmap} />
+            {roadmap ? (
+              <RoadmapPhases roadmap={roadmap} />
+            ) : (
+              <p className="text-[13px] text-ink-2">
+                Roadmap preview unavailable, but the draft programme was saved.
+                You can still publish, or go back and regenerate.
+              </p>
+            )}
           </div>
 
           {error ? (
@@ -412,4 +424,74 @@ function stepOrder(step: Step): number {
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** Accept backend roadmapJson even when shape is partial or phase names changed. */
+function normalizeRoadmap(
+  framework: FrameworkResponse | null,
+): import("@/features/framework/types").RoadmapJson | null {
+  if (!framework) return null;
+  const raw = framework.roadmapJson as Record<string, unknown> | null;
+  if (!raw || typeof raw !== "object") return null;
+
+  const summary = raw.summary as
+    | {
+        controlCount?: number;
+        requirementCount?: number;
+        isSdf?: boolean;
+        phaseCount?: number;
+      }
+    | undefined;
+  const phases = Array.isArray(raw.phases) ? raw.phases : null;
+  if (!summary || !phases) {
+    // Synthesize a single-phase preview from persisted controls so the wizard
+    // never blanks out after a successful generate.
+    if (framework.controls.length === 0) return null;
+    return {
+      generatedAt: framework.createdAt,
+      profile: {
+        industryProfile: framework.industryProfile ?? "",
+        maturityLevel: (framework.maturityLevel as "basic") ?? "basic",
+        dataSensitivity: "medium",
+        departmentCount: 0,
+        processorCount: 0,
+        isSdf: framework.isSdf,
+      },
+      summary: {
+        controlCount: framework.controls.length,
+        requirementCount: framework.requirements.length,
+        isSdf: framework.isSdf,
+        phaseCount: 1,
+      },
+      phases: [
+        {
+          name: "Foundation",
+          controls: framework.controls.map((c) => ({
+            code: c.code,
+            title: c.title,
+            dueAt: c.dueAt ?? framework.createdAt,
+          })),
+        },
+      ],
+    };
+  }
+
+  return {
+    generatedAt: typeof raw.generatedAt === "string" ? raw.generatedAt : framework.createdAt,
+    profile: (raw.profile as import("@/features/framework/types").FrameworkProfile) ?? {
+      industryProfile: framework.industryProfile ?? "",
+      maturityLevel: "basic",
+      dataSensitivity: "medium",
+      departmentCount: 0,
+      processorCount: 0,
+      isSdf: framework.isSdf,
+    },
+    summary: {
+      controlCount: summary.controlCount ?? framework.controls.length,
+      requirementCount: summary.requirementCount ?? framework.requirements.length,
+      isSdf: summary.isSdf ?? framework.isSdf,
+      phaseCount: summary.phaseCount ?? phases.length,
+    },
+    phases: phases as import("@/features/framework/types").RoadmapJson["phases"],
+  };
 }

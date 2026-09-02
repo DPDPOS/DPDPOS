@@ -2,7 +2,6 @@
 
 import {
   Archive,
-  Check,
   Circle,
   ExternalLink,
   Paperclip,
@@ -23,7 +22,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/errors";
 import { humanizeStatus } from "@/lib/constants/status-maps";
-import { formatDate, formatDateTime } from "@/lib/utils/format";
+import { formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import {
   VIOLATION_SEVERITIES,
@@ -119,11 +118,28 @@ export function ViolationDetailDrawer({
   const actions = violationActionsFor(status);
   const hasAssign = actions.some((a) => a.action === "assign");
   const canEditAssignee = !isViolationTerminal(status) && (hasAssign || violation.assignedTo);
-  // ARCHIVED is not in the chain → -1, handled by the `archived` branch below.
   const currentIndex = VIOLATION_STEP_CHAIN.indexOf(
     status as (typeof VIOLATION_STEP_CHAIN)[number],
   );
   const archived = status === "ARCHIVED";
+
+  const taskList = tasks ?? [];
+  const openTasks = taskList.filter(
+    (t) => t.status !== "CLOSED" && t.status !== "CANCELLED",
+  );
+  const daysOpen = Math.max(
+    0,
+    Math.floor(
+      (Date.now() - new Date(violation.openedAt).getTime()) /
+        (24 * 60 * 60 * 1000),
+    ),
+  );
+  const dueMs = violation.dueAt ? new Date(violation.dueAt).getTime() - Date.now() : null;
+  const overdue = dueMs !== null && dueMs < 0;
+  const dueSoon = dueMs !== null && dueMs >= 0 && dueMs < 2 * 24 * 60 * 60 * 1000;
+  const primaryAction = actions.find((a) => a.action !== "archive") ?? null;
+  const canClose =
+    status === "VALIDATED" && openTasks.length === 0;
 
   const handleMutationError = (err: unknown) => {
     if (err instanceof ApiError && err.code === "CONFLICT") {
@@ -175,6 +191,12 @@ export function ViolationDetailDrawer({
   };
 
   const confirmClose = () => {
+    if (openTasks.length > 0) {
+      setInlineError(
+        `${openTasks.length} remediation task(s) still open — close or cancel them first.`,
+      );
+      return;
+    }
     setInlineError(null);
     closeMutation.mutate(
       { id: violation.id, body: { version: violation.version, resolutionSummary: summary.trim() } },
@@ -200,199 +222,258 @@ export function ViolationDetailDrawer({
     <Drawer
       open
       onClose={onClose}
-      title="Violation detail"
-      description="Enforcement record"
+      title={violation.title}
+      description="Case workspace — fix via remediation, then validate and close."
+      className="sm:max-w-xl"
     >
-      <div className="space-y-6">
-        {/* Identity bar */}
-        <div className="space-y-1">
-          <p className="text-sm font-semibold leading-snug text-ink">{violation.title}</p>
+      <div className="space-y-5">
+        {/* Case header */}
+        <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip status={violation.severity} />
             <StatusChip status={violation.status} />
-            <Badge variant="outline">v{violation.version}</Badge>
+            <Badge variant="outline">{daysOpen}d open</Badge>
+            {overdue ? (
+              <Badge variant="outline" className="border-fail/40 text-fail">
+                Overdue
+              </Badge>
+            ) : dueSoon ? (
+              <Badge variant="outline" className="border-warn/40 text-warn">
+                Due soon
+              </Badge>
+            ) : null}
           </div>
-          <div className="flex flex-wrap gap-3 pt-1 text-xs text-ink-3">
+          {violation.description ? (
+            <p className="text-[13px] leading-relaxed text-ink-2">
+              {violation.description}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-3 text-xs text-ink-3">
             <span>Opened {formatDate(violation.openedAt)}</span>
-            <span>Updated {formatDateTime(violation.updatedAt)}</span>
+            <span>
+              Due {violation.dueAt ? formatDate(violation.dueAt) : "not set"}
+            </span>
+            <span>
+              Owner {userById.get(violation.assignedTo ?? "") ?? "Unassigned"}
+            </span>
           </div>
         </div>
 
-        {/* Source + evidence links */}
-        {(violation.validationResultId || violation.evidenceRequiredFlag) && (
-          <div className="flex flex-wrap gap-2">
-            {violation.validationResultId ? (
-              <Link
-                href="/validations"
-                className="focus-ring inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink-2 transition-colors hover:border-border-strong hover:text-ink"
-              >
-                <ExternalLink className="size-3" aria-hidden />
-                From validation result
-              </Link>
-            ) : null}
-            {violation.evidenceRequiredFlag ? (
-              <Link
-                href={`/evidence?violationId=${violation.id}`}
-                className="focus-ring inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink-2 transition-colors hover:border-border-strong hover:text-ink"
-              >
-                <Paperclip className="size-3" aria-hidden />
-                Evidence required
-              </Link>
-            ) : null}
-          </div>
-        )}
+        {/* Source / evidence */}
+        <div className="flex flex-wrap gap-2">
+          {violation.validationResultId ? (
+            <Link
+              href="/validations"
+              className="focus-ring inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink-2 hover:text-ink"
+            >
+              <ExternalLink className="size-3" aria-hidden />
+              From validation
+            </Link>
+          ) : null}
+          <Link
+            href={`/evidence?violationId=${violation.id}`}
+            className="focus-ring inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink-2 hover:text-ink"
+          >
+            <Paperclip className="size-3" aria-hidden />
+            {violation.evidenceRequiredFlag ? "Evidence required" : "Evidence"}
+          </Link>
+          <Link
+            href={`/remediation?violationId=${violation.id}`}
+            className="focus-ring inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink-2 hover:text-ink"
+          >
+            <ShieldAlert className="size-3" aria-hidden />
+            Remediation board
+          </Link>
+        </div>
 
-        {/* Stepper */}
-        <div>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-2">
-            Lifecycle
-          </h3>
-          <ol className="space-y-0">
-            {VIOLATION_STEP_CHAIN.map((step, index) => {
-              const done = !archived && currentIndex >= index;
-              const current = !archived && currentIndex === index;
-              const isLast = index === VIOLATION_STEP_CHAIN.length - 1;
-              return (
-                <li key={step} className="relative flex gap-2.5 pb-3">
-                  {!isLast ? (
-                    <span
-                      className="absolute left-[5px] top-4 h-full w-px bg-border"
-                      aria-hidden
-                    />
-                  ) : null}
-                  <span
-                    className={cn(
-                      "relative z-10 mt-0.5 flex size-2.5 items-center justify-center rounded-full border",
-                      done
-                        ? "border-pass bg-pass"
-                        : current
-                          ? "border-accent bg-accent"
-                          : "border-border bg-surface",
-                    )}
-                    aria-hidden
+        {/* Primary CTA */}
+        <Can perm="violation:assign">
+          {!isViolationTerminal(status) && primaryAction ? (
+            <div className="rounded-sm border border-accent/30 bg-accent-soft/40 p-3">
+              <p className="text-xs font-medium text-ink">Next step</p>
+              <p className="mt-0.5 text-xs text-ink-2">
+                {status === "VALIDATED" && openTasks.length > 0
+                  ? "Close or cancel remaining remediation tasks before closing this violation."
+                  : status === "VALIDATED"
+                    ? "All remediations done — close with a resolution summary."
+                    : openTasks.length > 0 &&
+                        (status === "IN_PROGRESS" || status === "PENDING_EVIDENCE")
+                      ? "Work the remediation tasks; completing them can auto-validate this case."
+                      : `Advance the case: ${ACTION_LABELS[primaryAction.action] ?? primaryAction.action}.`}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {primaryAction.action === "close" ? (
+                  <Button
+                    size="sm"
+                    disabled={!canClose || closeMutation.isPending}
+                    onClick={() => {
+                      setSummary("");
+                      setCloseDialog(true);
+                    }}
                   >
-                    {done ? <Check className="size-2 text-white" /> : null}
-                  </span>
-                  <div>
-                    <p
-                      className={cn(
-                        "text-[13px]",
-                        done || current ? "font-medium text-ink" : "text-ink-2",
-                      )}
+                    Close violation
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={updateMutation.isPending}
+                    onClick={() => transition(primaryAction.to)}
+                  >
+                    {ACTION_LABELS[primaryAction.action] ??
+                      humanizeStatus(primaryAction.action)}
+                  </Button>
+                )}
+                {actions
+                  .filter((a) => a.action !== primaryAction.action && a.action !== "archive")
+                  .map(({ action, to }) => (
+                    <Button
+                      key={action}
+                      size="sm"
+                      variant="secondary"
+                      disabled={updateMutation.isPending}
+                      onClick={() =>
+                        action === "close"
+                          ? (setSummary(""), setCloseDialog(true))
+                          : transition(to)
+                      }
                     >
-                      {humanizeStatus(step)}
-                    </p>
-                    {current ? <p className="text-xs text-ink-3">Current</p> : null}
+                      {ACTION_LABELS[action] ?? humanizeStatus(action)}
+                    </Button>
+                  ))}
+              </div>
+            </div>
+          ) : null}
+        </Can>
+
+        {/* Remediation — primary work surface */}
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-ink-2">
+              Remediation · {taskList.length - openTasks.length}/{taskList.length} done
+            </h3>
+            <Can perm="remediation:update">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setCreateTaskOpen(true)}
+                disabled={isViolationTerminal(status)}
+              >
+                Add task
+              </Button>
+            </Can>
+          </div>
+          {taskList.length > 0 ? (
+            <ul className="space-y-2">
+              {taskList.map((task) => (
+                <li
+                  key={task.id}
+                  className="rounded-md border border-border bg-surface p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-ink">
+                        {task.taskTitle}
+                      </p>
+                      <p className="mt-0.5 text-xs text-ink-3">
+                        {userById.get(task.assignedTo ?? "") ?? "Unassigned"}
+                        {task.dueAt ? ` · due ${formatDate(task.dueAt)}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <StatusChip status={task.source} />
+                      <StatusChip status={task.status} />
+                    </div>
                   </div>
+                  <MiniStepper status={task.status} />
+                  <Link
+                    href={`/remediation?taskId=${task.id}`}
+                    className="mt-2 inline-flex text-xs text-accent hover:underline"
+                  >
+                    Open task →
+                  </Link>
                 </li>
-              );
-            })}
-            {archived ? (
-              <li className="relative flex gap-2.5">
-                <span className="relative z-10 mt-0.5 flex size-2.5 items-center justify-center rounded-full border border-neutral bg-neutral">
-                  <Archive className="size-2 text-white" aria-hidden />
-                </span>
-                <p className="text-[13px] font-medium text-ink-2">Archived</p>
-              </li>
-            ) : null}
-          </ol>
+              ))}
+            </ul>
+          ) : (
+            <p className="rounded-md border border-dashed border-border p-3 text-xs text-ink-3">
+              No remediation tasks yet. An AUTO task is usually created when the
+              violation opens — otherwise add one to start fixing.
+            </p>
+          )}
         </div>
 
-        {/* Editable fields + actions — gated on the exact current status (§10.4) */}
+        {/* Compact ownership controls */}
         <Can perm="violation:assign">
           {!isViolationTerminal(status) ? (
-            <div className="space-y-3">
-              <h3 className="text-xs font-medium uppercase tracking-wider text-ink-2">
-                Actions
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Severity" htmlFor="violation-severity">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Severity" htmlFor="violation-severity">
+                <Select
+                  id="violation-severity"
+                  value={violation.severity}
+                  onChange={(event) => onSeverityChange(event.target.value)}
+                  disabled={updateMutation.isPending}
+                >
+                  {VIOLATION_SEVERITIES.map((severity) => (
+                    <option key={severity} value={severity}>
+                      {severity}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {canEditAssignee ? (
+                <Field label="Assignee" htmlFor="violation-assignee">
                   <Select
-                    id="violation-severity"
-                    value={violation.severity}
-                    onChange={(event) => onSeverityChange(event.target.value)}
+                    id="violation-assignee"
+                    value={violation.assignedTo ?? ""}
+                    onChange={(event) => onAssigneeChange(event.target.value)}
                     disabled={updateMutation.isPending}
                   >
-                    {VIOLATION_SEVERITIES.map((severity) => (
-                      <option key={severity} value={severity}>
-                        {severity}
+                    <option value="">Unassigned</option>
+                    {(users?.items ?? []).map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
                       </option>
                     ))}
                   </Select>
                 </Field>
-                {canEditAssignee ? (
-                  <Field label="Assignee" htmlFor="violation-assignee">
-                    <Select
-                      id="violation-assignee"
-                      value={violation.assignedTo ?? ""}
-                      onChange={(event) => onAssigneeChange(event.target.value)}
-                      disabled={updateMutation.isPending}
-                    >
-                      <option value="">Unassigned</option>
-                      {(users?.items ?? []).map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {actions.map(({ action, to }) =>
-                  action === "close" ? (
-                    <Button
-                      key={action}
-                      size="sm"
-                      onClick={() => {
-                        setSummary("");
-                        setCloseDialog(true);
-                      }}
-                      disabled={updateMutation.isPending || closeMutation.isPending}
-                    >
-                      Close violation
-                    </Button>
-                  ) : action === "archive" ? (
-                    <Button
-                      key={action}
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setArchiveConfirm(true)}
-                      disabled={updateMutation.isPending}
-                    >
-                      Archive
-                    </Button>
-                  ) : (
-                    <Button
-                      key={action}
-                      size="sm"
-                      onClick={() => transition(to)}
-                      disabled={updateMutation.isPending}
-                    >
-                      {ACTION_LABELS[action] ?? humanizeStatus(action)}
-                    </Button>
-                  ),
-                )}
-              </div>
-              <p className="text-xs text-ink-3">
-                Status, assignment and due-date changes carry the optimistic-lock
-                version and are audited.
-              </p>
+              ) : null}
             </div>
-          ) : (
-            <p className="text-xs text-ink-3">
-              Terminal state — the record is immutable.
-            </p>
-          )}
+          ) : null}
         </Can>
 
-        {inlineError ? (
-          <p role="alert" className="text-xs text-fail">
-            {inlineError}
-          </p>
-        ) : null}
+        {/* Collapsed lifecycle */}
+        <details className="rounded-sm border border-border">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wider text-ink-2">
+            Lifecycle · {humanizeStatus(status)}
+            {archived ? " (archived)" : ""}
+          </summary>
+          <ol className="space-y-0 border-t border-border px-3 py-2">
+            {VIOLATION_STEP_CHAIN.map((step, index) => {
+              const done = !archived && currentIndex >= index;
+              const current = !archived && currentIndex === index;
+              return (
+                <li key={step} className="flex items-center gap-2 py-1">
+                  <span
+                    className={cn(
+                      "size-2 rounded-full",
+                      done || current ? "bg-pass" : "bg-border",
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-[13px]",
+                      current ? "font-medium text-ink" : "text-ink-2",
+                    )}
+                  >
+                    {humanizeStatus(step)}
+                    {current ? " · current" : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </details>
 
-        {/* Resolution summary */}
         {violation.resolutionSummary ? (
           <div>
             <h3 className="mb-1 text-xs font-medium uppercase tracking-wider text-ink-2">
@@ -404,59 +485,27 @@ export function ViolationDetailDrawer({
           </div>
         ) : null}
 
-        {/* Linked remediation tasks */}
-        <div>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-ink-2">
-              Remediation tasks · {tasks?.length ?? 0}
-            </h3>
-            <Can perm="remediation:update">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setCreateTaskOpen(true)}
-                disabled={isViolationTerminal(status)}
-              >
-                Create task
-              </Button>
-            </Can>
-          </div>
-          {tasks && tasks.length > 0 ? (
-            <ul className="space-y-2">
-              {tasks.map((task) => (
-                <li
-                  key={task.id}
-                  className="rounded-md border border-border bg-surface p-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[13px] font-medium text-ink">{task.taskTitle}</p>
-                    <div className="flex items-center gap-1.5">
-                      <StatusChip status={task.source} />
-                      <StatusChip status={task.status} />
-                    </div>
-                  </div>
-                  <MiniStepper status={task.status} />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="rounded-md border border-dashed border-border p-3 text-xs text-ink-3">
-              No remediation tasks yet — create one to start fixing this violation.
-            </p>
-          )}
-        </div>
+        {inlineError ? (
+          <p role="alert" className="text-xs text-fail">
+            {inlineError}
+          </p>
+        ) : null}
 
-        {/* Trace footer */}
-        <dl className="grid grid-cols-2 gap-2 text-xs text-ink-2">
-          <div>
-            <dt className="uppercase tracking-wider text-ink-3">Assignee</dt>
-            <dd>{userById.get(violation.assignedTo ?? "") ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="uppercase tracking-wider text-ink-3">Due</dt>
-            <dd>{violation.dueAt ? formatDate(violation.dueAt) : "—"}</dd>
-          </div>
-        </dl>
+        <Can perm="violation:assign">
+          {!isViolationTerminal(status) ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setArchiveConfirm(true)}
+              disabled={updateMutation.isPending}
+            >
+              <Archive className="size-3.5" aria-hidden />
+              Archive
+            </Button>
+          ) : (
+            <p className="text-xs text-ink-3">Terminal state — record is immutable.</p>
+          )}
+        </Can>
       </div>
 
       {/* Close dialog — resolutionSummary required */}
@@ -464,7 +513,11 @@ export function ViolationDetailDrawer({
         open={closeDialog}
         onClose={() => setCloseDialog(false)}
         title="Close violation"
-        description="Only a validated violation can close. The resolution summary becomes part of the audit trail."
+        description={
+          openTasks.length > 0
+            ? `${openTasks.length} remediation task(s) are still open. Close or cancel them first.`
+            : "The resolution summary becomes part of the audit trail."
+        }
         footer={
           <>
             <Button variant="secondary" size="sm" onClick={() => setCloseDialog(false)}>
@@ -473,7 +526,11 @@ export function ViolationDetailDrawer({
             <Button
               size="sm"
               onClick={confirmClose}
-              disabled={summary.trim().length === 0 || closeMutation.isPending}
+              disabled={
+                summary.trim().length === 0 ||
+                closeMutation.isPending ||
+                openTasks.length > 0
+              }
             >
               Close violation
             </Button>
@@ -548,7 +605,6 @@ export function ViolationDetailDrawer({
         <Circle className="size-4 text-warn" aria-hidden />
       </Dialog>
 
-      {/* Create remediation task for this violation */}
       <CreateRemediationTaskDrawer
         open={createTaskOpen}
         onClose={() => setCreateTaskOpen(false)}

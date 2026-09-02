@@ -31,6 +31,12 @@ function shortAction(action: string): string {
   return action.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
 }
 
+/**
+ * Immutable activity log for the organisation — every privileged domain event
+ * (framework publish, evidence approve, violation close, login, …) is recorded
+ * here with actor, entity, and optional IP / user-agent. Use entity links to
+ * open a focused timeline; export for auditors.
+ */
 export function AuditView() {
   const [filters, setFilters] = useState<Omit<ListAuditLogsQuery, "cursor" | "limit">>({});
   const [applied, setApplied] = useState<Omit<ListAuditLogsQuery, "cursor" | "limit">>({});
@@ -122,8 +128,9 @@ export function AuditView() {
         <div>
           <h1 className="text-lg font-semibold text-ink">Audit log</h1>
           <p className="mt-0.5 text-[13px] text-ink-2">
-            Immutable, timestamped activity trail. Rows are append-only — the
-            record cannot be edited or deleted.
+            Immutable activity trail of privileged actions across the platform —
+            who did what, to which entity, and why. Each row includes a plain-language
+            description; open an entity link for its focused history.
           </p>
         </div>
         <Can perm="audit:export">
@@ -281,6 +288,11 @@ export function AuditView() {
                       <span className="text-xs text-ink-3">—</span>
                     )}
                   </div>
+                  {row.description ? (
+                    <p className="mt-0.5 truncate text-xs text-ink-2" title={row.description}>
+                      {row.description}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-1.5">
                   {row.correlationId ? (

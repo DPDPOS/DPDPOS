@@ -11,9 +11,10 @@ import { cn } from "@/lib/utils/cn";
  * and the /framework/roadmap page.
  */
 export function RoadmapPhases({ roadmap }: { roadmap: RoadmapJson }) {
+  const phases = roadmap.phases ?? [];
   return (
     <div className="space-y-6">
-      {roadmap.phases.map((phase, index) => (
+      {phases.map((phase, index) => (
         <section key={phase.name} className="relative pl-5">
           {/* Stepper rail */}
           <span
@@ -32,13 +33,13 @@ export function RoadmapPhases({ roadmap }: { roadmap: RoadmapJson }) {
           <header className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <h3 className="text-sm font-semibold text-ink">{phase.name}</h3>
             <span className="micro-label text-ink-3">
-              Phase {index + 1} · {phase.controls.length} control
-              {phase.controls.length === 1 ? "" : "s"}
+              Phase {index + 1} · {(phase.controls ?? []).length} control
+              {(phase.controls ?? []).length === 1 ? "" : "s"}
             </span>
           </header>
 
           <ul className="space-y-1.5">
-            {phase.controls.map((control) => {
+            {(phase.controls ?? []).map((control) => {
               const due = dueState(control.dueAt);
               return (
                 <li

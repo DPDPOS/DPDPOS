@@ -79,17 +79,30 @@ export function useSubmitForReview() {
 
 export function useApproveEvidence() {
   const invalidate = useInvalidateEvidence();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => evidenceApi.approve(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      // Approve may bump the linked control NOT_STARTED → IN_PROGRESS.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.controls() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.framework() });
+    },
   });
 }
 
 export function useLockEvidence() {
   const invalidate = useInvalidateEvidence();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => evidenceApi.lock(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      // Lock may bump the linked control → IMPLEMENTED.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.controls() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.framework() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
   });
 }
 
