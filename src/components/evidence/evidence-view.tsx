@@ -133,22 +133,22 @@ export function EvidenceView() {
     {
       key: "tags",
       header: "Tags",
-      accessor: (row) =>
-        row.tags.length ? (
+      accessor: (row) => {
+        const tags = row.tags ?? [];
+        return tags.length ? (
           <span className="flex max-w-[200px] flex-wrap gap-1">
-            {row.tags.slice(0, 3).map((tag) => (
+            {tags.slice(0, 3).map((tag) => (
               <Badge key={tag} variant="outline">
                 {tag}
               </Badge>
             ))}
-            {row.tags.length > 3 ? (
-              <Badge>+{row.tags.length - 3}</Badge>
-            ) : null}
+            {tags.length > 3 ? <Badge>+{tags.length - 3}</Badge> : null}
           </span>
         ) : (
           <span className="text-xs text-ink-3">—</span>
-        ),
-      sortValue: (row) => row.tags.join(","),
+        );
+      },
+      sortValue: (row) => (row.tags ?? []).join(","),
       sortable: true,
       className: "hidden lg:table-cell",
     },
@@ -805,7 +805,7 @@ function EvidenceDetailDrawer({
           />
           <Meta
             label="Tags"
-            value={(record.tags?.length ?? 0) ? record.tags!.join(", ") : "—"}
+            value={(record.tags ?? []).length ? (record.tags ?? []).join(", ") : "—"}
           />
         </section>
 
@@ -926,7 +926,7 @@ function TagEvidenceDialog({
   } = useForm<EvidenceTagFormValues>({
     resolver: zodResolver(evidenceTagSchema),
     defaultValues: {
-      tagsInput: record.tags.join(", "),
+      tagsInput: (record.tags ?? []).join(", "),
       description: record.description ?? "",
     },
   });
