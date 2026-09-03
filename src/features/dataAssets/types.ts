@@ -16,6 +16,7 @@ export interface DataAssetResponse {
   description: string | null;
   storageLocation: string | null;
   retentionPeriod: string | null;
+  countries: string[];
   departmentId: string | null;
   ownerUserId: string | null;
   status: string;
@@ -32,6 +33,7 @@ export interface CreateDataAssetPayload {
   description?: string;
   storageLocation?: string;
   retentionPeriod?: string;
+  countries?: string[];
   departmentId?: string;
   ownerUserId?: string;
 }

@@ -10,6 +10,7 @@ export const assetFormSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   storageLocation: z.string().trim().max(255).optional(),
   retentionPeriod: z.string().trim().max(255).optional(),
+  countriesText: z.string().trim().max(200).optional(),
   departmentId: z.string().optional(),
   ownerUserId: z.string().optional(),
 });
@@ -20,4 +21,16 @@ export type AssetFormValues = z.infer<typeof assetFormSchema>;
 export function cleanOptional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+export function parseCountries(text: string | undefined): string[] | undefined {
+  if (!text?.trim()) return undefined;
+  return [
+    ...new Set(
+      text
+        .split(/[,;\s]+/)
+        .map((c) => c.trim().toUpperCase())
+        .filter((c) => c.length === 2),
+    ),
+  ];
 }
