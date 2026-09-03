@@ -16,8 +16,9 @@ import {
   type DataAssetResponse,
 } from "@/features/dataAssets/types";
 import {
-  assetFormSchema,
   cleanOptional,
+  parseCountries,
+  assetFormSchema,
   type AssetFormValues,
 } from "@/features/dataAssets/schemas";
 import {
@@ -132,6 +133,14 @@ function AssetFormFields({ form }: { form: ReturnType<typeof useForm<AssetFormVa
           <Input id="da-retention" placeholder="36 months" {...register("retentionPeriod")} />
         </Field>
       </div>
+
+      <Field
+        label="Countries (ISO)"
+        htmlFor="da-countries"
+        hint="Where data is stored/replicated, e.g. IN, SG"
+      >
+        <Input id="da-countries" placeholder="IN, SG" {...register("countriesText")} />
+      </Field>
     </div>
   );
 }
@@ -160,6 +169,7 @@ export function CreateAssetDrawer({
       description: cleanOptional(values.description),
       storageLocation: cleanOptional(values.storageLocation),
       retentionPeriod: cleanOptional(values.retentionPeriod),
+      countries: parseCountries(values.countriesText),
       departmentId: cleanOptional(values.departmentId),
       ownerUserId: cleanOptional(values.ownerUserId),
     });
@@ -188,7 +198,13 @@ export function CreateAssetDrawer({
         <AssetFormFields form={form} />
         {create.isError ? (
           <p role="alert" className="mt-4 rounded-sm border border-fail/20 bg-fail-bg/50 px-3 py-2 text-xs text-fail">
-            {create.error instanceof ApiError ? create.error.message : "Create failed."}
+            {create.error instanceof ApiError
+              ? create.error.message.includes("departmentId")
+                ? "Selected department is invalid for this organisation. Pick a department from the list."
+                : create.error.message.includes("ownerUserId")
+                  ? "Selected owner is invalid for this organisation. Pick a user from the list."
+                  : create.error.message
+              : "Create failed."}
           </p>
         ) : null}
       </form>
@@ -217,6 +233,7 @@ export function EditAssetDrawer({
           description: asset.description ?? "",
           storageLocation: asset.storageLocation ?? "",
           retentionPeriod: asset.retentionPeriod ?? "",
+          countriesText: (asset.countries ?? []).join(", "),
           departmentId: asset.departmentId ?? "",
           ownerUserId: asset.ownerUserId ?? "",
         }
@@ -235,6 +252,7 @@ export function EditAssetDrawer({
         description: cleanOptional(values.description),
         storageLocation: cleanOptional(values.storageLocation),
         retentionPeriod: cleanOptional(values.retentionPeriod),
+        countries: parseCountries(values.countriesText) ?? [],
         departmentId: cleanOptional(values.departmentId),
         ownerUserId: cleanOptional(values.ownerUserId),
       },
@@ -264,7 +282,13 @@ export function EditAssetDrawer({
           <AssetFormFields form={form} />
           {update.isError ? (
             <p role="alert" className="mt-4 rounded-sm border border-fail/20 bg-fail-bg/50 px-3 py-2 text-xs text-fail">
-              {update.error instanceof ApiError ? update.error.message : "Save failed."}
+              {update.error instanceof ApiError
+                ? update.error.message.includes("departmentId")
+                  ? "Selected department is invalid for this organisation. Pick a department from the list."
+                  : update.error.message.includes("ownerUserId")
+                    ? "Selected owner is invalid for this organisation. Pick a user from the list."
+                    : update.error.message
+                : "Save failed."}
             </p>
           ) : null}
         </form>

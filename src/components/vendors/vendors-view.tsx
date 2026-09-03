@@ -22,6 +22,7 @@ export function VendorsView() {
   const [criticality, setCriticality] = useState("MEDIUM");
   const [vendorType, setVendorType] = useState("PROCESSOR");
   const [status, setStatus] = useState("ACTIVE");
+  const [countries, setCountries] = useState("");
   const [cliLabel, setCliLabel] = useState("vendors-cli");
   const [minted, setMinted] = useState<VendorCliTokenResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +51,13 @@ export function VendorsView() {
         criticality,
         status,
         vendorType,
+        countries: countries
+          .split(/[,;\s]+/)
+          .map((c) => c.trim().toUpperCase())
+          .filter(Boolean),
       });
       setName("");
+      setCountries("");
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Failed to create vendor",
@@ -132,6 +138,16 @@ export function VendorsView() {
               <option value="HIGH">HIGH</option>
               <option value="CRITICAL">CRITICAL</option>
             </Select>
+          </div>
+          <div className="min-w-[160px] flex-1">
+            <label className="mb-1 block text-xs font-medium">
+              Countries (ISO)
+            </label>
+            <Input
+              value={countries}
+              onChange={(e) => setCountries(e.target.value)}
+              placeholder="IN, US, SG"
+            />
           </div>
           <Button
             onClick={() => void onCreate()}

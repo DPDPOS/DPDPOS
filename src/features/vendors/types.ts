@@ -58,6 +58,7 @@ export type CreateReviewPayload = {
   residualRisk?: string;
   notes?: string;
   complete?: boolean;
+  evidenceFileIds?: string[];
 };
 
 export type CreateRelationshipPayload = {

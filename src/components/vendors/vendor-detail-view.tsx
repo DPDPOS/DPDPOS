@@ -41,11 +41,13 @@ export function VendorDetailView({ vendorId }: { vendorId: string }) {
   const offboard = useOffboardVendor();
 
   const [agreementTitle, setAgreementTitle] = useState("Master DPA");
+  const [crossBorderAllowed, setCrossBorderAllowed] = useState(false);
   const [childId, setChildId] = useState("");
   const [newChildName, setNewChildName] = useState("");
   const [reviewOutcome, setReviewOutcome] = useState("APPROVED");
   const [reviewResidual, setReviewResidual] = useState("MEDIUM");
   const [reviewNotes, setReviewNotes] = useState("");
+  const [reviewEvidenceIds, setReviewEvidenceIds] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const childOptions = useMemo(
@@ -71,6 +73,9 @@ export function VendorDetailView({ vendorId }: { vendorId: string }) {
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">{v.name}</h1>
         <p className="text-sm text-muted-foreground">
           {v.vendorType} · {v.status} · {v.criticality}
+          {(v.countries?.length ?? 0) > 0
+            ? ` · ${v.countries.join(", ")}`
+            : ""}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {v.status === "DRAFT" ? (
@@ -141,18 +146,33 @@ export function VendorDetailView({ vendorId }: { vendorId: string }) {
               <li key={f}>{f}</li>
             ))}
           </ul>
+          {(risk.data?.childCriticalCount ?? 0) > 0 ? (
+            <p className="mt-2 text-xs">
+              Inherited SCRM: {risk.data?.childCriticalCount} HIGH/CRITICAL
+              descendant(s) (+{Math.min(20, (risk.data?.childCriticalCount ?? 0) * 5)}{" "}
+              residual, cap 20)
+            </p>
+          ) : null}
         </div>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-medium">Agreements (DPA)</h2>
         <Can perm="vendor:update">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-end gap-2">
             <Input
               className="max-w-xs"
               value={agreementTitle}
               onChange={(e) => setAgreementTitle(e.target.value)}
             />
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={crossBorderAllowed}
+                onChange={(e) => setCrossBorderAllowed(e.target.checked)}
+              />
+              Cross-border allowed
+            </label>
             <Button
               onClick={() => {
                 setError(null);
@@ -161,6 +181,7 @@ export function VendorDetailView({ vendorId }: { vendorId: string }) {
                     title: agreementTitle,
                     versionLabel: "v1",
                     status: "ACTIVE",
+                    crossBorderAllowed,
                     expiresAt: new Date(
                       Date.now() + 365 * 24 * 60 * 60 * 1000,
                     ).toISOString(),
@@ -237,6 +258,16 @@ export function VendorDetailView({ vendorId }: { vendorId: string }) {
                 placeholder="Optional notes"
               />
             </div>
+            <div className="min-w-[200px] flex-1">
+              <label className="mb-1 block text-xs font-medium">
+                Evidence file IDs
+              </label>
+              <Input
+                value={reviewEvidenceIds}
+                onChange={(e) => setReviewEvidenceIds(e.target.value)}
+                placeholder="uuid, uuid"
+              />
+            </div>
             <Button
               disabled={createReview.isPending}
               onClick={() => {
@@ -247,8 +278,15 @@ export function VendorDetailView({ vendorId }: { vendorId: string }) {
                     residualRisk: reviewResidual,
                     complete: reviewOutcome !== "PENDING",
                     notes: reviewNotes.trim() || undefined,
+                    evidenceFileIds: reviewEvidenceIds
+                      .split(/[,;\s]+/)
+                      .map((id) => id.trim())
+                      .filter(Boolean),
                   })
-                  .then(() => setReviewNotes(""))
+                  .then(() => {
+                    setReviewNotes("");
+                    setReviewEvidenceIds("");
+                  })
                   .catch((err) =>
                     setError(
                       err instanceof ApiError
