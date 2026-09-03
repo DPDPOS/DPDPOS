@@ -123,7 +123,7 @@ describe("DashboardView", () => {
               avgResolutionDays: null,
               byType: {},
             },
-            consent: { totalRecords: 0, granted: 0, withdrawn: 0 },
+            consent: { totalRecords: 0, granted: 0, withdrawn: 0, grantedThisMonth: 0, withdrawnThisMonth: 0, expired: 0, expiringSoon: 0 },
           },
         }),
       ),

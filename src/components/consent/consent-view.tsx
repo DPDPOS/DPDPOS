@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Search, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Can } from "@/components/ui/can";
 import { DataTable, type TableColumn } from "@/components/ui/data-table";
@@ -24,8 +24,10 @@ import {
 import {
   cleanOptional,
   consentRecordFormSchema,
+  parsePurposes,
   type ConsentRecordFormValues,
 } from "@/features/consent/schemas";
+import { useEvidenceList } from "@/features/evidence/hooks";
 import { useNotices } from "@/features/notices/hooks";
 import { useDataAssets } from "@/features/dataAssets/hooks";
 import { cn } from "@/lib/utils/cn";
@@ -89,12 +91,17 @@ export function ConsentView() {
     {
       key: "purpose",
       header: "Purpose",
-      accessor: (row) => (
-        <span className="block max-w-md truncate text-[13px] font-medium text-ink">
-          {row.purpose}
-        </span>
-      ),
-      sortValue: (row) => row.purpose,
+      accessor: (row) => {
+        const labels =
+          row.purposes?.length > 0 ? row.purposes : row.purpose ? [row.purpose] : [];
+        return (
+          <span className="block max-w-md truncate text-[13px] font-medium text-ink">
+            {labels.join(", ") || "—"}
+          </span>
+        );
+      },
+      sortValue: (row) =>
+        (row.purposes?.length ? row.purposes : [row.purpose]).join(", "),
       sortable: true,
     },
     {
@@ -316,6 +323,7 @@ function CreateConsentRecordDrawer({
   const create = useCreateConsentRecord();
   const notices = useNotices();
   const assets = useDataAssets();
+  const evidence = useEvidenceList({ pageSize: 50 }, open);
   const {
     register,
     handleSubmit,
@@ -327,25 +335,36 @@ function CreateConsentRecordDrawer({
       dataSubjectIdentifier: "",
       noticeId: "",
       dataAssetId: "",
-      purpose: "",
+      purposes: "",
       grantedAt: toDateTimeLocal(new Date()),
+      expiresAt: "",
       proofFileId: "",
     },
   });
+  const purposesValue =
+    (useWatch({ control, name: "purposes" }) as string | undefined) ?? "";
+  const purposeChips = parsePurposes(purposesValue);
 
   const submit = handleSubmit(async (values) => {
+    const purposes = parsePurposes(values.purposes);
     await create.mutateAsync({
       dataSubjectIdentifier: values.dataSubjectIdentifier,
       noticeId: cleanOptional(values.noticeId),
       dataAssetId: cleanOptional(values.dataAssetId),
-      purpose: values.purpose,
+      purpose: purposes[0]!,
+      purposes,
       grantedAt: values.grantedAt
         ? new Date(values.grantedAt).toISOString()
+        : undefined,
+      expiresAt: values.expiresAt
+        ? new Date(`${values.expiresAt}T23:59:59`).toISOString()
         : undefined,
       proofFileId: cleanOptional(values.proofFileId),
     });
     onClose();
   });
+
+  const evidenceItems = evidence.data?.items ?? [];
 
   return (
     <Drawer
@@ -378,8 +397,29 @@ function CreateConsentRecordDrawer({
           />
         </Field>
 
-        <Field label="Purpose" htmlFor="c-purpose" error={errors.purpose?.message} hint="What the consent covers">
-          <Input id="c-purpose" placeholder="Marketing emails" {...register("purpose")} />
+        <Field
+          label="Purposes"
+          htmlFor="c-purpose"
+          error={errors.purposes?.message}
+          hint="Comma-separated; first purpose is primary"
+        >
+          <Input
+            id="c-purpose"
+            placeholder="Marketing emails, Analytics"
+            {...register("purposes")}
+          />
+          {purposeChips.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5" aria-live="polite">
+              {purposeChips.map((purpose) => (
+                <span
+                  key={purpose}
+                  className="inline-flex max-w-full truncate rounded-sm border border-accent/30 bg-accent-soft px-1.5 py-0.5 text-xs font-medium text-accent"
+                >
+                  {purpose}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -431,10 +471,45 @@ function CreateConsentRecordDrawer({
           <Field label="Granted at" htmlFor="c-granted" hint="Defaults to now.">
             <Input id="c-granted" type="datetime-local" {...register("grantedAt")} />
           </Field>
-          <Field label="Proof file" htmlFor="c-proof" hint="Optional evidence reference">
-            <Input id="c-proof" placeholder="ev_…" {...register("proofFileId")} />
+          <Field label="Expires at" htmlFor="c-expires" hint="Optional consent expiry date">
+            <Input id="c-expires" type="date" {...register("expiresAt")} />
           </Field>
         </div>
+
+        <Field
+          label="Evidence file ID (proof)"
+          htmlFor="c-proof"
+          error={errors.proofFileId?.message}
+          hint="Optional proof from the evidence vault"
+        >
+          {evidenceItems.length > 0 ? (
+            <Controller
+              control={control}
+              name="proofFileId"
+              render={({ field }) => (
+                <Select
+                  id="c-proof"
+                  value={field.value ?? ""}
+                  onChange={(event) => field.onChange(event.target.value || "")}
+                  aria-label="Evidence file ID (proof)"
+                >
+                  <option value="">No proof file</option>
+                  {evidenceItems.map((file) => (
+                    <option key={file.id} value={file.id}>
+                      {file.fileName}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            />
+          ) : (
+            <Input
+              id="c-proof"
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              {...register("proofFileId")}
+            />
+          )}
+        </Field>
 
         {create.isError ? (
           <p role="alert" className="rounded-sm border border-fail/20 bg-fail-bg/50 px-3 py-2 text-xs text-fail">

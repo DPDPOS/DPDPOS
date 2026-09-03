@@ -36,6 +36,10 @@ export interface ConsentMetrics {
   totalRecords: number;
   granted: number;
   withdrawn: number;
+  grantedThisMonth: number;
+  withdrawnThisMonth: number;
+  expired: number;
+  expiringSoon: number;
 }
 
 export interface ValidationSummary {

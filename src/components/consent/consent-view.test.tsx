@@ -138,7 +138,7 @@ describe("ConsentView (§9.5)", () => {
       within(drawer).getByLabelText("Data subject identifier"),
       "amit@example.com",
     );
-    await user.type(within(drawer).getByLabelText("Purpose"), "Product updates");
+    await user.type(within(drawer).getByLabelText("Purposes"), "Product updates");
     await user.selectOptions(
       within(drawer).getByLabelText("Notice"),
       "n0000000-0000-4000-8000-000000000002",

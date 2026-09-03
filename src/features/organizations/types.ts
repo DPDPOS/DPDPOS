@@ -1,3 +1,7 @@
+/** Consent manager integration mode — mirrors Prisma ConsentManagerMode. */
+export const CONSENT_MANAGER_MODES = ["NONE", "EXTERNAL_CM"] as const;
+export type ConsentManagerMode = (typeof CONSENT_MANAGER_MODES)[number];
+
 /** Mirrors OrganizationResponse in dpdpos_backend organizations/types. */
 export interface OrganizationResponse {
   id: string;
@@ -8,6 +12,8 @@ export interface OrganizationResponse {
   companyType: string | null;
   maturityLevel: string | null;
   isSignificantDataFiduciary: boolean;
+  consentManagerMode: ConsentManagerMode | string;
+  consentManagerUrl: string | null;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -22,4 +28,6 @@ export interface UpdateOrganizationPayload {
   companyType?: string | null;
   maturityLevel?: string | null;
   isSignificantDataFiduciary?: boolean;
+  consentManagerMode?: ConsentManagerMode;
+  consentManagerUrl?: string | null;
 }

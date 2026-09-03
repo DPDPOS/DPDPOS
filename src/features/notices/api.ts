@@ -1,5 +1,9 @@
 import { apiClient } from "@/lib/api/client";
-import type { CreateNoticePayload, NoticeResponse } from "./types";
+import type {
+  CreateNoticePayload,
+  NoticeDiffResponse,
+  NoticeResponse,
+} from "./types";
 
 /**
  * GET/POST /api/v1/notices, GET/DELETE /api/v1/notices/:id. The list is
@@ -13,4 +17,9 @@ export const noticesApi = {
     apiClient.post<NoticeResponse>("/notices", body),
   /** Soft delete — the notice stays in the audit trail. */
   remove: (id: string) => apiClient.del<NoticeResponse>(`/notices/${id}`),
+  /** Unified diff of the current notice against another version of the same title. */
+  diff: (id: string, againstVersion: number) =>
+    apiClient.get<NoticeDiffResponse>(`/notices/${id}/diff`, {
+      againstVersion,
+    }),
 };

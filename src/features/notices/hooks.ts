@@ -32,3 +32,22 @@ export function useDeleteNotice() {
     },
   });
 }
+
+export function useNoticeDiff(
+  id: string | null,
+  againstVersion: number | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["notices", "diff", id, againstVersion] as const,
+    queryFn: () =>
+      noticesApi.diff(id as string, againstVersion as number),
+    enabled:
+      enabled &&
+      Boolean(id) &&
+      againstVersion !== null &&
+      Number.isFinite(againstVersion) &&
+      againstVersion > 0,
+    retry: 0,
+  });
+}

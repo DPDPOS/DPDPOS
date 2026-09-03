@@ -12,10 +12,11 @@ import { Drawer } from "@/components/ui/drawer";
 import { ErrorState } from "@/components/ui/error-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/utils/format";
 import type { NoticeResponse } from "@/features/notices/types";
-import { useCreateNotice, useDeleteNotice, useNotices } from "@/features/notices/hooks";
+import { useCreateNotice, useDeleteNotice, useNoticeDiff, useNotices } from "@/features/notices/hooks";
 import {
   noticeFormSchema,
   NOTICE_CONTENT_MAX,
@@ -174,14 +175,17 @@ function CreateNoticeDrawer({
     formState: { errors },
   } = useForm<NoticeFormValues>({
     resolver: zodResolver(noticeFormSchema),
-    defaultValues: { title: "", content: "", effectiveFrom: "" },
+    defaultValues: { title: "", content: "", contentFormat: "PLAIN", effectiveFrom: "" },
   });
   const contentLength = ((useWatch({ control, name: "content" }) as string | undefined) ?? "").length;
+  const contentFormat = (useWatch({ control, name: "contentFormat" }) as "PLAIN" | "MARKDOWN" | undefined) ?? "PLAIN";
+  const contentValue = (useWatch({ control, name: "content" }) as string | undefined) ?? "";
 
   const submit = handleSubmit(async (values) => {
     await create.mutateAsync({
       title: values.title,
       content: values.content,
+      contentFormat: values.contentFormat,
       effectiveFrom: values.effectiveFrom
         ? new Date(`${values.effectiveFrom}T00:00:00`).toISOString()
         : undefined,
@@ -213,6 +217,13 @@ function CreateNoticeDrawer({
           <Input id="n-title" placeholder="Privacy notice for customer data" {...register("title")} />
         </Field>
 
+        <Field label="Format" htmlFor="n-format">
+          <Select id="n-format" {...register("contentFormat")}>
+            <option value="PLAIN">Plain text</option>
+            <option value="MARKDOWN">Markdown</option>
+          </Select>
+        </Field>
+
         <Field label="Content" htmlFor="n-content" error={errors.content?.message}>
           <div className="relative">
             <textarea
@@ -236,6 +247,15 @@ function CreateNoticeDrawer({
             </span>
           </div>
         </Field>
+
+        {contentFormat === "MARKDOWN" ? (
+          <div className="rounded-sm border border-border bg-surface-2 px-3 py-2">
+            <p className="micro-label mb-1">Markdown preview (raw)</p>
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-[12px] text-ink-2">
+              {contentValue || "—"}
+            </pre>
+          </div>
+        ) : null}
 
         <Field label="Effective from" htmlFor="n-effective" hint="Optional — when the notice takes effect.">
           <Input id="n-effective" type="date" {...register("effectiveFrom")} />
@@ -261,6 +281,12 @@ function NoticeDetailDrawer({
   onClose: () => void;
 }) {
   const linked = useConsentRecords({ noticeId: notice?.id }, !!notice);
+  const [againstVersion, setAgainstVersion] = useState("");
+  const againstNum = againstVersion ? Number(againstVersion) : null;
+  const diff = useNoticeDiff(
+    notice?.id ?? null,
+    againstNum && againstNum > 0 && againstNum !== notice?.version ? againstNum : null,
+  );
 
   return (
     <Drawer
@@ -281,6 +307,9 @@ function NoticeDetailDrawer({
               v{notice.version}
             </span>
             <span className="text-xs text-ink-3">
+              {notice.contentFormat ?? "PLAIN"}
+            </span>
+            <span className="text-xs text-ink-3">
               {notice.effectiveFrom
                 ? `Effective ${formatDate(notice.effectiveFrom)}`
                 : "No effective date set"}
@@ -298,6 +327,38 @@ function NoticeDetailDrawer({
               {notice.content}
             </p>
           </div>
+
+          {notice.version > 1 ? (
+            <div className="space-y-2 rounded-sm border border-border px-3 py-3">
+              <p className="text-[13px] font-medium text-ink">Compare versions</p>
+              <div className="flex flex-wrap items-end gap-2">
+                <Field label="Against version" htmlFor="n-diff-v">
+                  <Input
+                    id="n-diff-v"
+                    type="number"
+                    min={1}
+                    max={notice.version - 1}
+                    value={againstVersion}
+                    onChange={(e) => setAgainstVersion(e.target.value)}
+                    className="w-24"
+                  />
+                </Field>
+              </div>
+              {diff.isFetching ? (
+                <p className="text-xs text-ink-3">Loading diff…</p>
+              ) : null}
+              {diff.data ? (
+                <pre className="max-h-48 overflow-auto rounded-sm border border-border bg-surface px-2 py-2 font-mono text-[11px] text-ink-2">
+                  {diff.data.unifiedDiff}
+                </pre>
+              ) : null}
+              {diff.isError ? (
+                <p className="text-xs text-fail">
+                  {diff.error instanceof ApiError ? diff.error.message : "Diff failed"}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </Drawer>

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NOTICE_CONTENT_FORMATS } from "./types";
 
 /** Content limit mirroring createNoticeDtoSchema. */
 export const NOTICE_CONTENT_MAX = 20_000;
@@ -11,6 +12,7 @@ export const noticeFormSchema = z.object({
     .trim()
     .min(1, "Notice content is required")
     .max(NOTICE_CONTENT_MAX, `Keep the notice under ${NOTICE_CONTENT_MAX.toLocaleString()} characters`),
+  contentFormat: z.enum(NOTICE_CONTENT_FORMATS),
   // yyyy-mm-dd from the date input; converted to ISO on submit.
   effectiveFrom: z.string().optional(),
 });

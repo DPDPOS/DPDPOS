@@ -9,9 +9,11 @@ export interface ConsentRecordResponse {
   noticeId: string | null;
   dataAssetId: string | null;
   purpose: string;
+  purposes: string[];
   consentState: string;
   grantedAt: string;
   withdrawnAt: string | null;
+  expiresAt: string | null;
   proofFileId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -22,8 +24,12 @@ export interface CreateConsentRecordPayload {
   dataSubjectIdentifier: string;
   noticeId?: string;
   dataAssetId?: string;
+  /** Preferred multi-purpose list. */
+  purposes?: string[];
+  /** Back-compat singular purpose. */
   purpose: string;
   grantedAt?: string;
+  expiresAt?: string;
   proofFileId?: string;
 }
 

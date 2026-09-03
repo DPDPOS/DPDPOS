@@ -384,6 +384,13 @@ function DashboardBody({
                   </span>
                 </div>
               ))}
+              <p className="pt-1 text-xs text-ink-3">
+                This month: +{consent.grantedThisMonth ?? 0} granted ·{" "}
+                {consent.withdrawnThisMonth ?? 0} withdrawn
+                {(consent.expired ?? 0) > 0 || (consent.expiringSoon ?? 0) > 0
+                  ? ` · ${consent.expired ?? 0} expired · ${consent.expiringSoon ?? 0} expiring`
+                  : ""}
+              </p>
             </div>
           </CardBody>
         </Card>
