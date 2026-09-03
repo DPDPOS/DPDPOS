@@ -581,6 +581,7 @@ export const handlers = [
     const created = {
       id: `n-${Date.now()}`,
       version: 1,
+      contentFormat: "PLAIN",
       publishedBy: "usr_demo_admin",
       createdAt: "2026-08-08T10:00:00.000Z",
       updatedAt: "2026-08-08T10:00:00.000Z",
@@ -588,6 +589,33 @@ export const handlers = [
     };
     noticeRows.push(created as never);
     return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.get("/api/notices/:id/diff", ({ params, request }) => {
+    const notice = noticeRows.find((row) => row.id === params.id);
+    if (!notice) {
+      return HttpResponse.json(
+        {
+          success: false,
+          error: { code: "NOT_FOUND", message: "Notice not found" },
+        },
+        { status: 404 },
+      );
+    }
+    const url = new URL(request.url);
+    const againstVersion = Number(url.searchParams.get("againstVersion"));
+    return HttpResponse.json({
+      success: true,
+      data: {
+        noticeId: notice.id,
+        title: notice.title,
+        fromVersion: againstVersion,
+        toVersion: notice.version,
+        fromContent: `(v${againstVersion} content)`,
+        toContent: notice.content,
+        unifiedDiff: `--- v${againstVersion}\n+++ v${notice.version}\n@@ -1 +1 @@\n-old\n+${notice.content.slice(0, 40)}`,
+      },
+    });
   }),
 
   http.delete("/api/notices/:id", ({ params }) => {
@@ -646,13 +674,21 @@ export const handlers = [
 
   http.post("/api/consent-records", async ({ request }) => {
     const body = (await request.json()) as Record<string, unknown>;
+    const purposes = Array.isArray(body.purposes)
+      ? (body.purposes as string[])
+      : body.purpose
+        ? [String(body.purpose)]
+        : [];
     const created = {
       id: `cn-${Date.now()}`,
       consentState: "GRANTED",
       withdrawnAt: null,
+      expiresAt: null,
       createdAt: "2026-08-08T10:00:00.000Z",
       updatedAt: "2026-08-08T10:00:00.000Z",
       ...body,
+      purposes,
+      purpose: purposes[0] ?? (typeof body.purpose === "string" ? body.purpose : ""),
     };
     consentRows.push(created as never);
     return HttpResponse.json({ success: true, data: created }, { status: 201 });
@@ -1268,6 +1304,10 @@ export const handlers = [
     if (body.maturityLevel !== undefined) organizationRow.maturityLevel = body.maturityLevel;
     if (body.isSignificantDataFiduciary !== undefined)
       organizationRow.isSignificantDataFiduciary = body.isSignificantDataFiduciary;
+    if (body.consentManagerMode !== undefined)
+      organizationRow.consentManagerMode = body.consentManagerMode;
+    if (body.consentManagerUrl !== undefined)
+      organizationRow.consentManagerUrl = body.consentManagerUrl;
     organizationRow.updatedAt = new Date().toISOString();
     return HttpResponse.json({ success: true, data: organizationRow });
   }),

@@ -49,6 +49,8 @@ export function SettingsView() {
   });
 
   const isSdf = useWatch({ control, name: "isSignificantDataFiduciary" }) ?? false;
+  const consentManagerMode =
+    useWatch({ control, name: "consentManagerMode" }) ?? "NONE";
 
   // Hydrate the form when the org loads or changes.
   useEffect(() => {
@@ -61,6 +63,9 @@ export function SettingsView() {
       companyType: org.companyType ?? undefined,
       maturityLevel: org.maturityLevel ?? undefined,
       isSignificantDataFiduciary: org.isSignificantDataFiduciary,
+      consentManagerMode:
+        (org.consentManagerMode as "NONE" | "EXTERNAL_CM") ?? "NONE",
+      consentManagerUrl: org.consentManagerUrl ?? "",
     });
   }, [org, reset]);
 
@@ -94,6 +99,9 @@ export function SettingsView() {
         operatingRegion: values.operatingRegion || null,
         companyType: values.companyType || null,
         maturityLevel: values.maturityLevel || null,
+        consentManagerUrl: values.consentManagerUrl?.trim()
+          ? values.consentManagerUrl.trim()
+          : null,
       };
       await updateMutation.mutateAsync({ id: org.id, body });
       setSaved(true);
@@ -201,6 +209,46 @@ export function SettingsView() {
                 </span>
               </span>
             </label>
+          </div>
+
+          <div className="rounded-md border border-border bg-surface-2/60 p-3">
+            <h3 className="text-[13px] font-medium text-ink">Consent Manager</h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-ink-2">
+              Set EXTERNAL_CM when digital consent is handled by an external
+              consent manager; validation rules use this for scale guidance.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field
+                label="Mode"
+                htmlFor="org-cm-mode"
+                error={errors.consentManagerMode?.message}
+              >
+                <Select id="org-cm-mode" {...register("consentManagerMode")}>
+                  <option value="NONE">NONE</option>
+                  <option value="EXTERNAL_CM">EXTERNAL_CM</option>
+                </Select>
+              </Field>
+              <Field
+                label="Manager URL"
+                htmlFor="org-cm-url"
+                error={errors.consentManagerUrl?.message}
+                hint={
+                  consentManagerMode === "EXTERNAL_CM"
+                    ? "Required for EXTERNAL_CM in production"
+                    : "Optional when mode is NONE"
+                }
+              >
+                <Input
+                  id="org-cm-url"
+                  type="url"
+                  placeholder="https://cm.example.com"
+                  maxLength={2000}
+                  {...register("consentManagerUrl", {
+                    setValueAs: (value: string) => (value === "" ? null : value),
+                  })}
+                />
+              </Field>
+            </div>
           </div>
 
           {updateMutation.isError ? (
